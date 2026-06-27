@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Database, ShieldAlert, Cpu, Activity } from 'lucide-react';
+import { Database, ShieldAlert, Cpu, Activity, X, Server, Layers } from 'lucide-react';
 import socketService from '../services/socket';
 
 export default function TopologyVisualizer() {
@@ -9,6 +9,7 @@ export default function TopologyVisualizer() {
   
   const [lastEvent, setLastEvent] = useState(null);
   const [activeDetections, setActiveDetections] = useState(0);
+  const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
     // 1. Scene Setup
@@ -17,8 +18,7 @@ export default function TopologyVisualizer() {
     const height = 320;
 
     const scene = new THREE.Scene();
-    // Fog to give depth
-    scene.background = null; // Transparent background to blend with CSS gradient
+    scene.background = null;
     scene.fog = new THREE.FogExp2(0x06070a, 0.08);
 
     // 2. Camera Setup
@@ -43,7 +43,6 @@ export default function TopologyVisualizer() {
     dirLight.position.set(5, 10, 7);
     scene.add(dirLight);
 
-    // Node-specific point lights for glow effect
     const sourceLight = new THREE.PointLight(0x4facfe, 1.5, 6);
     sourceLight.position.set(-4, 0, 0);
     scene.add(sourceLight);
@@ -56,13 +55,12 @@ export default function TopologyVisualizer() {
     computeLight.position.set(4, 0, 0);
     scene.add(computeLight);
 
-    // Injection Alert Flash Light (initially off/black)
     const alertLight = new THREE.PointLight(0xff0844, 0, 10);
     alertLight.position.set(0, 0, 0.5);
     scene.add(alertLight);
 
     // 5. Geometries & Meshes
-    // Node 1: Logs (Source) - Sphere
+    // Node 1: Logs (Source)
     const sphereGeo = new THREE.SphereGeometry(0.5, 32, 32);
     const sourceMat = new THREE.MeshStandardMaterial({
       color: 0x4facfe,
@@ -73,9 +71,10 @@ export default function TopologyVisualizer() {
     });
     const sourceNode = new THREE.Mesh(sphereGeo, sourceMat);
     sourceNode.position.set(-4, 0, 0);
+    sourceNode.name = "source";
     scene.add(sourceNode);
 
-    // Node 2: Otari Gate - Box
+    // Node 2: Otari Gate
     const boxGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
     const gateMat = new THREE.MeshStandardMaterial({
       color: 0x00f2fe,
@@ -86,9 +85,10 @@ export default function TopologyVisualizer() {
     });
     const gateNode = new THREE.Mesh(boxGeo, gateMat);
     gateNode.position.set(0, 0, 0);
+    gateNode.name = "gate";
     scene.add(gateNode);
 
-    // Node 3: Local Inference (Compute) - Octahedron
+    // Node 3: Local Inference
     const octaGeo = new THREE.OctahedronGeometry(0.6, 0);
     const computeMat = new THREE.MeshStandardMaterial({
       color: 0x00f5a0,
@@ -99,17 +99,20 @@ export default function TopologyVisualizer() {
     });
     const computeNode = new THREE.Mesh(octaGeo, computeMat);
     computeNode.position.set(4, 0, 0);
+    computeNode.name = "compute";
     scene.add(computeNode);
+
+    // Interactive array for Raycasting
+    const interactiveObjects = [sourceNode, gateNode, computeNode];
 
     // Grid Floor
     const gridHelper = new THREE.GridHelper(20, 20, 0x4facfe, 0x1e293b);
     gridHelper.position.y = -1.2;
-    // Lower grid opacity
     gridHelper.material.opacity = 0.2;
     gridHelper.material.transparent = true;
     scene.add(gridHelper);
 
-    // Connection Pipes (Tubes representing pathways)
+    // Connection Pipes
     const createConnectionPipe = (p1, p2, colorVal) => {
       const points = [p1, p2];
       const path = new THREE.CatmullRomCurve3(points);
@@ -128,14 +131,13 @@ export default function TopologyVisualizer() {
     scene.add(pipeLeft);
     scene.add(pipeRight);
 
-    // 6. Particle System state arrays
+    // Particles
     const particles = [];
     const particleGeometry = new THREE.SphereGeometry(0.08, 8, 8);
     const particleMaterialNormal = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
     const particleMaterialBlocked = new THREE.MeshBasicMaterial({ color: 0xff0844 });
     const particleMaterialSuccess = new THREE.MeshBasicMaterial({ color: 0x00f5a0 });
 
-    // Function to spawn a particle representing a log data packet
     const spawnDataPacket = (isBlocked) => {
       const pMesh = new THREE.Mesh(
         particleGeometry,
@@ -147,15 +149,14 @@ export default function TopologyVisualizer() {
       particles.push({
         mesh: pMesh,
         speed: 0.06 + Math.random() * 0.02,
-        stage: 0, // 0 = source to gate, 1 = gate to destination, 2 = success finished
+        stage: 0,
         isBlocked: isBlocked,
         progress: 0,
-        yOffset: (Math.random() - 0.5) * 0.1, // Slight hover variation
+        yOffset: (Math.random() - 0.5) * 0.1,
         zOffset: (Math.random() - 0.5) * 0.1
       });
     };
 
-    // Particles explosion fragment geometry
     const fragmentGeo = new THREE.BoxGeometry(0.04, 0.04, 0.04);
     const spawnExplosion = (position) => {
       const fragmentCount = 15;
@@ -174,16 +175,16 @@ export default function TopologyVisualizer() {
           isFragment: true,
           velocity: new THREE.Vector3(
             (Math.random() - 0.5) * 0.1,
-            (Math.random() - 0.5) * 0.1 + 0.03, // Tends to burst upwards
+            (Math.random() - 0.5) * 0.1 + 0.03,
             (Math.random() - 0.5) * 0.1
           ),
-          life: 1.0, // Decay value
+          life: 1.0,
           decay: 0.02 + Math.random() * 0.02
         });
       }
     };
 
-    // 7. Subscribe to Socket Telemetry to trigger packets dynamically
+    // Subscriptions
     const unsubscribeParticles = socketService.subscribe('particles', (data) => {
       setLastEvent(data.blocked ? 'BLOCKED PROMPT INJECTION' : 'DATA PACKET ROUTED');
       spawnDataPacket(data.blocked);
@@ -192,7 +193,26 @@ export default function TopologyVisualizer() {
       }
     });
 
-    // Mouse movement visual feedback (parallax shift)
+    // Raycaster Click Handler
+    const raycaster = new THREE.Raycaster();
+    const mouse2D = new THREE.Vector2();
+
+    const onClick = (event) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse2D.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse2D.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse2D, camera);
+      const intersects = raycaster.intersectObjects(interactiveObjects);
+
+      if (intersects.length > 0) {
+        const clickedName = intersects[0].object.name;
+        setSelectedNode(clickedName);
+      }
+    };
+    renderer.domElement.addEventListener('click', onClick);
+
+    // Mouse Parallax movement
     let mouseX = 0;
     let mouseY = 0;
     const onMouseMove = (event) => {
@@ -202,7 +222,6 @@ export default function TopologyVisualizer() {
     };
     container.addEventListener('mousemove', onMouseMove);
 
-    // Window resize handler
     const handleResize = () => {
       if (!container) return;
       const w = container.clientWidth;
@@ -212,14 +231,12 @@ export default function TopologyVisualizer() {
     };
     window.addEventListener('resize', handleResize);
 
-    // 8. Animation Loop
+    // Animation Loop
     let animationFrameId;
-    let gateFlashTimer = 0;
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
 
-      // Node rotations/animations
       sourceNode.rotation.y += 0.01;
       sourceNode.rotation.x += 0.005;
 
@@ -229,31 +246,30 @@ export default function TopologyVisualizer() {
       computeNode.rotation.y += 0.008;
       computeNode.rotation.x += 0.012;
 
-      // Pulse nodes glow intensity based on simple math
       const time = Date.now() * 0.003;
       sourceMat.emissiveIntensity = 0.4 + Math.sin(time) * 0.15;
       gateMat.emissiveIntensity = 0.5 + Math.cos(time * 1.5) * 0.2;
       computeMat.emissiveIntensity = 0.4 + Math.sin(time * 0.8) * 0.15;
 
-      // Handle alert light flash fade
       if (alertLight.intensity > 0) {
         alertLight.intensity -= 0.05;
-        // gateNode flash color effect
         gateMat.color.setHex(alertLight.intensity > 0.5 ? 0xff0844 : 0x00f2fe);
         gateMat.emissive.setHex(alertLight.intensity > 0.5 ? 0xff0844 : 0x00f2fe);
       }
 
-      // Parallax camera effect
-      camera.position.x += (mouseX * 2.0 - camera.position.x) * 0.05;
-      camera.position.y += (mouseY * 1.0 + 2.0 - camera.position.y) * 0.05;
+      camera.position.x += (mouseX * 1.5 - camera.position.x) * 0.05;
+      camera.position.y += (mouseY * 0.8 + 2.0 - camera.position.y) * 0.05;
       camera.lookAt(0, 0, 0);
 
-      // Update active particles
+      // Scale up selected node slightly
+      sourceNode.scale.setScalar(selectedNode === "source" ? 1.2 : 1.0);
+      gateNode.scale.setScalar(selectedNode === "gate" ? 1.2 : 1.0);
+      computeNode.scale.setScalar(selectedNode === "compute" ? 1.2 : 1.0);
+
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
 
         if (p.isFragment) {
-          // Handle explosion fragments
           p.mesh.position.add(p.velocity);
           p.mesh.rotation.x += 0.1;
           p.mesh.rotation.y += 0.1;
@@ -270,45 +286,33 @@ export default function TopologyVisualizer() {
           continue;
         }
 
-        // Handle flowing data packets
         if (p.stage === 0) {
-          // Moving Source -> Gate
           p.progress += p.speed;
-          // Interpolate position from -4 to 0
           const x = THREE.MathUtils.lerp(-4, 0, p.progress);
-          // Apply sinusoidal height path
           const y = Math.sin(p.progress * Math.PI) * 0.4 + p.yOffset;
           p.mesh.position.set(x, y, p.zOffset);
 
           if (p.progress >= 1.0) {
-            // Hit the Gate!
             if (p.isBlocked) {
-              // Blocked: Flash red and explode
               alertLight.intensity = 2.5;
               spawnExplosion(p.mesh.position);
-              
-              // Remove particle
               scene.remove(p.mesh);
               p.mesh.geometry.dispose();
               p.mesh.material.dispose();
               particles.splice(i, 1);
             } else {
-              // Sanitized/Clean: Shift color to green and move to stage 1
               p.mesh.material = particleMaterialSuccess;
               p.stage = 1;
               p.progress = 0;
             }
           }
         } else if (p.stage === 1) {
-          // Moving Gate -> Compute
           p.progress += p.speed;
-          // Interpolate position from 0 to 4
           const x = THREE.MathUtils.lerp(0, 4, p.progress);
           const y = Math.sin(p.progress * Math.PI) * 0.4 + p.yOffset;
           p.mesh.position.set(x, y, p.zOffset);
 
           if (p.progress >= 1.0) {
-            // Hit compute, remove particle
             scene.remove(p.mesh);
             p.mesh.geometry.dispose();
             p.mesh.material.dispose();
@@ -322,14 +326,15 @@ export default function TopologyVisualizer() {
 
     animate();
 
-    // Clean up
     return () => {
       window.removeEventListener('resize', handleResize);
       container.removeEventListener('mousemove', onMouseMove);
+      if (renderer.domElement) {
+        renderer.domElement.removeEventListener('click', onClick);
+      }
       unsubscribeParticles();
       cancelAnimationFrame(animationFrameId);
       
-      // Dispose meshes and materials
       sourceNode.geometry.dispose();
       sourceNode.material.dispose();
       gateNode.geometry.dispose();
@@ -350,31 +355,61 @@ export default function TopologyVisualizer() {
 
       renderer.dispose();
     };
-  }, []);
+  }, [selectedNode]);
+
+  // Selected node detailed specifications mapping
+  const getNodeDetails = () => {
+    switch (selectedNode) {
+      case "source":
+        return {
+          title: "LOGS_INGRESS_BUS_01",
+          type: "Input Stream Adapter",
+          desc: "Watches the server logs stream file in real-time. Collects raw user requests and forwards them to the Otari gateway.",
+          metrics: { "Channel Port": "Stdio", "Read Rate": "~3.3 p/s", "Buffer Alloc": "1024KB" }
+        };
+      case "gate":
+        return {
+          title: "OTARIGUARD_PDP_SHIELD",
+          type: "Policy Decision Point Gateway",
+          desc: "The active security node. Applies prompt-level filters to scan for injections and enforces hard quota budget policies.",
+          metrics: { "Max Quota Limit": "$2.00", "Rate Limit": "100 RPM", "Active Rules": "Rule-101, 205, 302" }
+        };
+      case "compute":
+        return {
+          title: "INFERENCE_CORE_02",
+          type: "Downstream LLM Compute Node",
+          desc: "Local server hosting model parameters. Runs prompt queries on CPU/GPU threads only after gateway authorization.",
+          metrics: { "Host Core": "Llamafile Server", "Thread Alloc": "8 CPU threads", "Model Name": "Llama-3-8B" }
+        };
+      default:
+        return null;
+    }
+  };
+
+  const nodeDetails = getNodeDetails();
 
   return (
     <div className="glass-panel" ref={containerRef} style={{ position: 'relative', width: '100%', overflow: 'hidden', padding: '16px' }}>
       <div className="card-header" style={{ marginBottom: '0px', borderBottom: 'none' }}>
-        <div className="card-title" style={{ color: 'var(--neon-cyan)' }}>
+        <div className="card-title" style={{ color: 'var(--neon-cyan)', fontFamily: 'var(--font-mono)' }}>
           <Activity size={16} />
-          OtariGuard Gateway Topology
+          OTARIGUARD_TOPOLOGY_MONITOR
         </div>
-        <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-blue)' }} /> Ingress Logs
+        <div style={{ display: 'flex', gap: '16px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--neon-blue)' }} /> Ingress
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-cyan)' }} /> Otari PDP Gate
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--neon-cyan)' }} /> PDP Gate
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-green)' }} /> Downstream Compute
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--neon-green)' }} /> Downstream
           </span>
         </div>
       </div>
 
-      {/* Floating HTML Labels over Three.js Canvas */}
+      {/* Floating HTML Labels */}
       <div style={{ position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none', top: 0, left: 0 }}>
-        {/* Source Label */}
         <div style={{
           position: 'absolute',
           left: '18%',
@@ -382,15 +417,13 @@ export default function TopologyVisualizer() {
           transform: 'translateX(-50%)',
           textAlign: 'center',
           color: 'var(--neon-blue)',
-          fontSize: '12px',
-          fontWeight: '600',
-          textShadow: '0 0 10px rgba(79, 172, 254, 0.4)'
+          fontSize: '11px',
+          fontFamily: 'var(--font-mono)'
         }}>
-          <Database size={16} style={{ margin: '0 auto 4px auto' }} />
-          LOG SOURCE
+          <Database size={14} style={{ margin: '0 auto 4px auto' }} />
+          LOG_SOURCE
         </div>
 
-        {/* Gate Label */}
         <div style={{
           position: 'absolute',
           left: '50%',
@@ -398,15 +431,13 @@ export default function TopologyVisualizer() {
           transform: 'translateX(-50%)',
           textAlign: 'center',
           color: 'var(--neon-cyan)',
-          fontSize: '12px',
-          fontWeight: '600',
-          textShadow: '0 0 10px rgba(0, 242, 254, 0.4)'
+          fontSize: '11px',
+          fontFamily: 'var(--font-mono)'
         }}>
-          <ShieldAlert size={16} style={{ margin: '0 auto 4px auto' }} />
-          OTARI GATEWAY
+          <ShieldAlert size={14} style={{ margin: '0 auto 4px auto' }} />
+          OTARI_GATEWAY
         </div>
 
-        {/* Compute Label */}
         <div style={{
           position: 'absolute',
           left: '82%',
@@ -414,34 +445,72 @@ export default function TopologyVisualizer() {
           transform: 'translateX(-50%)',
           textAlign: 'center',
           color: 'var(--neon-green)',
-          fontSize: '12px',
-          fontWeight: '600',
-          textShadow: '0 0 10px rgba(0, 245, 160, 0.4)'
+          fontSize: '11px',
+          fontFamily: 'var(--font-mono)'
         }}>
-          <Cpu size={16} style={{ margin: '0 auto 4px auto' }} />
-          LOCAL INFERENCE
+          <Cpu size={14} style={{ margin: '0 auto 4px auto' }} />
+          LOCAL_COMPUTE
         </div>
 
-        {/* Status ticker overlay */}
+        {/* Status ticker */}
         {lastEvent && (
           <div style={{
             position: 'absolute',
             bottom: '10px',
             left: '16px',
-            fontSize: '11px',
+            fontSize: '10px',
             fontFamily: 'var(--font-mono)',
             color: lastEvent.includes('BLOCKED') ? 'var(--neon-rose)' : 'var(--text-secondary)',
-            background: 'rgba(0,0,0,0.4)',
+            background: 'rgba(0,0,0,0.5)',
             padding: '3px 8px',
             borderRadius: '4px',
             border: '1px solid rgba(255,255,255,0.03)'
           }}>
-            SYSTEM BUS: {lastEvent}
+            BUS_STATUS: {lastEvent}
           </div>
         )}
       </div>
 
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '320px', cursor: 'grab' }} />
+      {/* Floating Raycasted Node Inspector Sidebar */}
+      {nodeDetails && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          width: '240px',
+          background: 'rgba(6, 7, 10, 0.95)',
+          border: '1px solid var(--border-medium)',
+          borderRadius: '8px',
+          padding: '12px',
+          zIndex: 100,
+          fontFamily: 'var(--font-mono)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--neon-cyan)' }}>NODE_INSPECTOR</span>
+            <button 
+              onClick={() => setSelectedNode(null)} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#fff', marginBottom: '2px' }}>{nodeDetails.title}</div>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>{nodeDetails.type}</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4', marginBottom: '8px' }}>{nodeDetails.desc}</div>
+          <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+            {Object.entries(nodeDetails.metrics).map(([key, val]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', margin: '3px 0' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{key}:</span>
+                <span style={{ color: '#fff' }}>{val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '320px', cursor: 'pointer' }} />
     </div>
   );
 }

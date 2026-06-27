@@ -8,7 +8,9 @@ class TelemetrySocketService {
       logs: [],
       particles: [],
       stats: [],
-      events: []
+      events: [],
+      rules_init: [],
+      rules_updated: []
     };
     this.useSimulation = true;
     this.simInterval = null;
@@ -54,6 +56,14 @@ class TelemetrySocketService {
 
       this.socket.on('system_event', (data) => {
         this.emitEvent(data);
+      });
+
+      this.socket.on('policy_rules_init', (data) => {
+        this.emitRulesInit(data);
+      });
+
+      this.socket.on('policy_rules_updated', (data) => {
+        this.emitRulesUpdated(data);
       });
 
       this.socket.on('connect_error', (error) => {
@@ -120,6 +130,14 @@ class TelemetrySocketService {
     this.listeners.events.forEach(cb => cb(sysEvent));
   }
 
+  emitRulesInit(data) {
+    this.listeners.rules_init.forEach(cb => cb(data));
+  }
+
+  emitRulesUpdated(data) {
+    this.listeners.rules_updated.forEach(cb => cb(data));
+  }
+
   emitStatus(status) {
     if (this.listeners.status) {
       this.listeners.status.forEach(cb => cb(status));
@@ -159,13 +177,15 @@ class TelemetrySocketService {
       ram: 5.6,
       disk: 1.8,
       gateLatency: 11,
-      inferenceLatency: 42
+      inferenceLatency: 42,
+      tps: 28.5
     });
 
     this.simInterval = setInterval(() => {
+      const currentMock = mockPrompts[index];
+      
       // 1. Simulate budget increment
       if (this.currentBudget < 2.0) {
-        const currentMock = mockPrompts[index];
         const cost = currentMock.isInjection ? 0.005 : (Math.random() * 0.08 + 0.01);
         this.currentBudget = Math.min(2.0, this.currentBudget + cost);
       } else {
@@ -179,6 +199,7 @@ class TelemetrySocketService {
       const cpu = Math.floor(Math.random() * 25 + 40); // 40% to 65%
       const ram = Number((5.2 + Math.random() * 0.8).toFixed(1)); // 5.2GB to 6.0GB
       const disk = Number((0.5 + Math.random() * 4.2).toFixed(1)); // 0.5MB/s to 4.7MB/s
+      const tps = Number((15 + Math.random() * 30).toFixed(1)); // 15 to 45 tokens/sec
 
       this.emitStats({
         cpu,
@@ -186,11 +207,11 @@ class TelemetrySocketService {
         disk,
         gateLatency,
         inferenceLatency,
+        tps,
         activeModel: currentMock.isInjection ? "Llama-3-8B (Escalated)" : "DeepSeek-1.5B (Local)"
       });
 
       // 3. Emit log event
-      const currentMock = mockPrompts[index];
       const now = new Date();
       const timestampString = `[${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}]`;
 

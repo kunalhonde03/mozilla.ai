@@ -3,6 +3,7 @@ import time
 import asyncio
 import socketio
 import uvicorn
+import random
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -17,6 +18,13 @@ LOG_FILE = "logs_stream.log"
 current_budget = 0.42
 budget_limit = 2.00
 
+# Dynamic policy rules
+policy_rules = {
+    "system_bypass": ["ignore", "system", "instruction"],
+    "data_leak": ["password", "credential", "key"],
+    "code_execution": ["rm -rf", "execute", "sudo"]
+}
+
 # Enable CORS for FastAPI
 app.add_middleware(
     CORSMiddleware,
@@ -26,16 +34,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic schemas for sandbox uploads
+# Pydantic schemas
 class TestLogItem(BaseModel):
     raw: str
+
+class PolicyUpdate(BaseModel):
+    system_bypass: List[str]
+    data_leak: List[str]
+    code_execution: List[str]
 
 @sio.event
 async def connect(sid, environ):
     global current_budget
     print(f"Frontend Client Connected: {sid}")
-    # Immediately send the current budget to the newly connected client
     await sio.emit('budget_update', {'spent': round(current_budget, 4)}, to=sid)
+    # Send current policy rules
+    await sio.emit('policy_rules_init', policy_rules, to=sid)
 
 @sio.event
 def disconnect(sid):
@@ -44,10 +58,14 @@ def disconnect(sid):
 # Helper to process a raw log and return parsed log details
 def process_raw_log(raw_message):
     global current_budget
-    # Scans for prompt injection triggers
-    is_injection = "CRITICAL" in raw_message or "injection" in raw_message.lower() or "bypass" in raw_message.lower() or "ignore" in raw_message.lower()
+    raw_lower = raw_message.lower()
     
-    # Process sanitization string
+    is_bypass = any(w in raw_lower for w in policy_rules["system_bypass"])
+    is_leak = any(w in raw_lower for w in policy_rules["data_leak"])
+    is_exec = any(w in raw_lower for w in policy_rules["code_execution"])
+    
+    is_injection = is_bypass or is_leak or is_exec
+    
     sanitized = raw_message
     if is_injection:
         sanitized = "[BLOCKED: Intercepted prompt injection threat]"
@@ -55,7 +73,6 @@ def process_raw_log(raw_message):
     else:
         cost = 0.04 + (len(raw_message) * 0.0002)
 
-    # Update budget
     current_budget = min(budget_limit, current_budget + cost)
 
     now = datetime_now_string()
@@ -76,7 +93,6 @@ def datetime_now_string():
 async def replay_logs_task(logs: List[TestLogItem]):
     print(f"Sandbox: Replaying {len(logs)} uploaded prompts...")
     
-    # Send a journal system log indicating sandbox started
     now_str = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]"
     await sio.emit('system_event', {
         'id': os.urandom(4).hex(),
@@ -86,20 +102,16 @@ async def replay_logs_task(logs: List[TestLogItem]):
     })
 
     for item in logs:
-        # Process prompt
         parsed = process_raw_log(item.raw)
         
-        # Emit logs, budget and event triggers
         await sio.emit('budget_update', {'spent': round(current_budget, 4)})
         await sio.emit('log_event', parsed)
         
-        # Trigger topology visualizer particle
         await sio.emit('particles', {
             'blocked': parsed['isInjection'],
-            'timestamp': Date_now_ms()
+            'timestamp': int(time.time() * 1000)
         })
 
-        # Add event log
         event_text = f"Sandbox PDP Decision: Blocked injection threat" if parsed['isInjection'] else f"Sandbox: Query verified and routed successfully"
         await sio.emit('system_event', {
             'id': os.urandom(4).hex(),
@@ -108,7 +120,7 @@ async def replay_logs_task(logs: List[TestLogItem]):
             'type': 'danger' if parsed['isInjection'] else 'info'
         })
 
-        await asyncio.sleep(1.5) # Replay delay
+        await asyncio.sleep(1.5)
 
     await sio.emit('system_event', {
         'id': os.urandom(4).hex(),
@@ -117,13 +129,29 @@ async def replay_logs_task(logs: List[TestLogItem]):
         'type': 'info'
     })
 
-def Date_now_ms():
-    return int(time.time() * 1000)
-
 @app.post("/upload_test_log")
 async def upload_test_log(payload: List[TestLogItem]):
     asyncio.create_task(replay_logs_task(payload))
     return {"status": "success", "count": len(payload)}
+
+@app.post("/update_policy")
+async def update_policy(policy: PolicyUpdate):
+    global policy_rules
+    policy_rules["system_bypass"] = [w.lower().strip() for w in policy.system_bypass if w.strip()]
+    policy_rules["data_leak"] = [w.lower().strip() for w in policy.data_leak if w.strip()]
+    policy_rules["code_execution"] = [w.lower().strip() for w in policy.code_execution if w.strip()]
+    
+    # Broadcast updated policies to all connected socket clients
+    await sio.emit('policy_rules_updated', policy_rules)
+    
+    now_str = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}]"
+    await sio.emit('system_event', {
+        'id': os.urandom(4).hex(),
+        'timestamp': now_str,
+        'text': "PDP Policy configurations reloaded and compiled successfully",
+        'type': 'warning'
+      })
+    return {"status": "success", "rules": policy_rules}
 
 # Background task that tails the log file and streams events over Socket.io
 async def tail_log_file():
@@ -145,8 +173,12 @@ async def tail_log_file():
 
             clean_line = line.strip()
             
-            # Parse log info
-            is_injection = "CRITICAL" in clean_line or "injection" in clean_line.lower() or "bypass" in clean_line.lower() or "ignore" in clean_line.lower()
+            # Parse log info using active rules
+            raw_lower = clean_line.lower()
+            is_bypass = any(w in raw_lower for w in policy_rules["system_bypass"])
+            is_leak = any(w in raw_lower for w in policy_rules["data_leak"])
+            is_exec = any(w in raw_lower for w in policy_rules["code_execution"])
+            is_injection = is_bypass or is_leak or is_exec
             
             parts = clean_line.split("] ", 2)
             timestamp = parts[0] + "]" if len(parts) > 0 else "[Time]"
@@ -160,7 +192,6 @@ async def tail_log_file():
             else:
                 cost = 0.04 + (len(raw_message) * 0.0002)
 
-            # Update live budget
             current_budget = min(budget_limit, current_budget + cost)
             
             # Send events to frontend
@@ -186,12 +217,33 @@ async def tail_log_file():
             # Emit particles trigger
             await sio.emit('particles', {
                 'blocked': is_injection,
-                'timestamp': Date_now_ms()
+                'timestamp': int(time.time() * 1000)
             })
+
+# Background task to emit hardware stats and latency parameters periodically
+async def emit_periodic_stats():
+    while True:
+        gateLatency = random.randint(8, 16)
+        inferenceLatency = random.randint(35, 60)
+        cpu = random.randint(40, 65)
+        ram = round(random.uniform(5.2, 6.0), 1)
+        disk = round(random.uniform(0.5, 4.7), 1)
+        tps = round(random.uniform(15.0, 45.0), 1)
+
+        await sio.emit('hardware_stats', {
+            'cpu': cpu,
+            'ram': ram,
+            'disk': disk,
+            'gateLatency': gateLatency,
+            'inferenceLatency': inferenceLatency,
+            'tps': tps
+        })
+        await asyncio.sleep(3.0)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(tail_log_file())
+    asyncio.create_task(emit_periodic_stats())
 
 if __name__ == "__main__":
     uvicorn.run(socket_app, host="127.0.0.1", port=5000)

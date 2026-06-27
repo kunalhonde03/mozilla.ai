@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Settings, Server, Radio, Play, Pause, Cpu, HardDrive, CircleDot, Database } from 'lucide-react';
+import { Shield, Settings, Server, Radio, Play, Pause, Cpu, HardDrive, CircleDot, Database, Sliders, Eye } from 'lucide-react';
 import socketService from './services/socket';
 import BudgetEnforcer from './components/BudgetEnforcer';
 import SecurityFeed from './components/SecurityFeed';
@@ -7,14 +7,16 @@ import TopologyVisualizer from './components/TopologyVisualizer';
 import EventsLog from './components/EventsLog';
 import SandboxModal from './components/SandboxModal';
 import ExplainabilityView from './components/ExplainabilityView';
+import PolicyEditor from './components/PolicyEditor';
+import MetricsChart from './components/MetricsChart';
 
 export default function App() {
-  const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
   const [isSimulating, setIsSimulating] = useState(true);
   const [socketUrl, setSocketUrl] = useState('http://localhost:5000');
   const [showConfig, setShowConfig] = useState(false);
   const [isSandboxOpen, setIsSandboxOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [activeRightTab, setActiveRightTab] = useState('explain');
   const [hwStats, setHwStats] = useState({
     cpu: 45,
     ram: 5.6,
@@ -39,9 +41,6 @@ export default function App() {
         ram: data.ram,
         disk: data.disk
       });
-      if (data.activeModel) {
-        setActiveModel(data.activeModel);
-      }
     });
 
     const interval = setInterval(handleBudgetStatus, 1000);
@@ -108,7 +107,7 @@ export default function App() {
                 marginLeft: '8px',
                 letterSpacing: '1px',
                 background: 'rgba(0, 242, 254, 0.05)'
-              }}>v1.4.0</span>
+              }}>v1.5.0</span>
             </h1>
             <p style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
               SYSTEM_PDP_DECISION_PORTAL_SHIELD
@@ -232,12 +231,15 @@ export default function App() {
         </div>
       )}
 
-      {/* DASHBOARD MODULES */}
+      {/* DASHBOARD GRID MODULES */}
       <main className="dashboard-grid">
-        {/* Left Column (Topology + System Journal + Security Terminal Logs) */}
+        {/* Left Column (Topology + Metrics + System Journal + Security Terminal Logs) */}
         <div className="left-column">
-          {/* ThreeJS Flow Visualizer */}
+          {/* ThreeJS Flow Visualizer with click inspector */}
           <TopologyVisualizer />
+
+          {/* Infrastructure Speed & Latency Line Chart */}
+          <MetricsChart />
 
           {/* Actionable System Journal Event Log */}
           <EventsLog />
@@ -246,46 +248,64 @@ export default function App() {
           <SecurityFeed />
         </div>
 
-        {/* Right Column (Wallet Enforcer + Sandbox Explainability View + Specs) */}
-        <div className="right-column">
-          {/* Wallet Enforcer Gauge & Latency Table */}
+        {/* Right Column (Wallet Enforcer + Security Config Editor Tabs) */}
+        <div className="right-column" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Wallet Enforcer Gauge & FinOps Cost Breakdown Pie */}
           <BudgetEnforcer />
 
-          {/* Sandbox Explainability View (Side-by-Side Ingress vs Egress) */}
-          <ExplainabilityView />
-
-          {/* Quick Specs / Transparency details */}
-          <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div className="card-header" style={{ marginBottom: '4px' }}>
-              <div className="card-title" style={{ fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
-                GATEWAY_POLICY_SPECIFICATIONS
-              </div>
+          {/* Tabs: Security Audit Logs vs Policy Editor */}
+          <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '410px' }}>
+            <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <button 
+                onClick={() => setActiveRightTab('explain')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: activeRightTab === 'explain' ? 'var(--neon-cyan)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: activeRightTab === 'explain' ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  borderBottom: activeRightTab === 'explain' ? '2px solid var(--neon-cyan)' : 'none',
+                  paddingBottom: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <Eye size={12} />
+                SECURITY_EXPLAINABILITY_AUDIT
+              </button>
+              <button 
+                onClick={() => setActiveRightTab('policy')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: activeRightTab === 'policy' ? 'var(--neon-yellow)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: activeRightTab === 'policy' ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  borderBottom: activeRightTab === 'policy' ? '2px solid var(--neon-yellow)' : 'none',
+                  paddingBottom: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <Sliders size={12} />
+                POLICY_RULES_EDITOR
+              </button>
             </div>
-            
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ lineHeight: '1.5' }}>
-                Active safety enforcer filters incoming prompt token packages at the gateway. 
-                Downstream local inference cores are shielded from malicious system prompt manipulations.
-              </p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-                <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>ENGINE_TYPE</div>
-                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>Llamafile PDP</div>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>MODEL_TARGET</div>
-                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>{activeModel}</div>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>HARD_TOKEN_LIMIT</div>
-                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>$2.00 hard limit</div>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>STREAMING_STATE</div>
-                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>IO_POLLING</div>
-                </div>
-              </div>
+
+            <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+              {activeRightTab === 'explain' ? (
+                <ExplainabilityView />
+              ) : (
+                <PolicyEditor />
+              )}
             </div>
           </div>
         </div>
