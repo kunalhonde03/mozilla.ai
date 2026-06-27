@@ -5,9 +5,11 @@ import asyncio
 import socketio
 import uvicorn
 from datetime import datetime
+from collections import deque
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI, AsyncOpenAI
+from genetic_budget_engine import GeneticBudgetEngine, build_traffic_dna
 
 # Initialize Socket.IO AsyncServer
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -27,6 +29,27 @@ openai_client = AsyncOpenAI(
 
 LOG_FILE = "logs_stream.log"
 current_budget = 0.42
+
+# ── Genetic Budget Engine (Evolutionary FinOps) ──────────────────────────────
+ga_engine = GeneticBudgetEngine()
+latest_genome_result = {
+    "ceiling": 2.00,
+    "prev_ceiling": 2.00,
+    "delta": 0.0,
+    "mode": "STABLE_BASELINE",
+    "color": "green",
+    "reason": "System initializing...",
+    "generation": 0,
+    "fitness_best": 0.0,
+    "fitness_avg": 0.0,
+    "dna": {"threatRatio": 0, "cpuUsage": 0, "systemHealth": 1, "isDDoS": False, "isCritical": False}
+}
+
+# Rolling window to track recent injection events for DDoS detection (last 30s)
+# Each entry is a timestamp of when an injection was detected
+recent_injection_times: deque = deque(maxlen=20)
+# Rolling window: (is_injection: bool) for last N events
+recent_events_window: deque = deque(maxlen=15)
 
 # Cache to store the latest logs to send immediately to new clients
 log_history = []
@@ -129,11 +152,37 @@ async def tail_log_stream():
                     inference_latency = random.randint(15, 30)
                     cost = random.random() * 0.05 + 0.01
                 
-                # 3. Update active budget wallet
-                current_budget = min(2.0, current_budget + cost)
+                # 3. Track events for GA TrafficDNA
+                recent_events_window.append(is_injection)
+                if is_injection:
+                    recent_injection_times.append(time.time())
+                
+                # 4. Detect DDoS burst: 3+ injections in the last 10 seconds
+                now_ts = time.time()
+                recent_burst = sum(1 for t in recent_injection_times if now_ts - t < 10) >= 3
+                
+                # 5. Run the Genetic Algorithm to evolve the dynamic budget ceiling
+                threat_count = sum(1 for e in recent_events_window if e)
+                total_count = len(recent_events_window)
+                cpu_pct = latest_stats.get("cpu", 45)
+                traffic_dna = build_traffic_dna(
+                    threat_count=threat_count,
+                    total_count=total_count,
+                    cpu_percent=cpu_pct,
+                    recent_injection_burst=recent_burst
+                )
+                genome_result = ga_engine.tick(traffic_dna)
+                latest_genome_result.update(genome_result)
+                
+                # Emit GA evolution result to dashboard
+                await sio.emit("budget_genome", genome_result)
+                
+                # 6. Update active budget wallet (capped by evolved ceiling)
+                evolved_ceiling = genome_result["ceiling"]
+                current_budget = min(evolved_ceiling, current_budget + cost)
                 
                 # Emit budget update event
-                await sio.emit("budget_update", {"spent": round(current_budget, 4)})
+                await sio.emit("budget_update", {"spent": round(current_budget, 4), "ceiling": round(evolved_ceiling, 4)})
                 
                 # Emit log event details
                 log_payload = {
@@ -186,9 +235,11 @@ async def tail_log_stream():
 async def connect(sid, environ):
     print(f"Client connected: {sid}")
     # Instantly push budget to the connecting client
-    await sio.emit("budget_update", {"spent": round(current_budget, 4)}, to=sid)
+    await sio.emit("budget_update", {"spent": round(current_budget, 4), "ceiling": latest_genome_result["ceiling"]}, to=sid)
     # Instantly push active telemetry stats to the connecting client
     await sio.emit("hardware_stats", latest_stats, to=sid)
+    # Instantly push latest GA genome state
+    await sio.emit("budget_genome", latest_genome_result, to=sid)
     # Instantly push log history cache to populate lists immediately
     for log in log_history:
         await sio.emit("log_event", log, to=sid)

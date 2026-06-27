@@ -3,19 +3,28 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Wallet, ShieldAlert, CheckCircle, Clock, Server } from 'lucide-react';
 import socketService from '../services/socket';
 
-const BUDGET_LIMIT = 2.00;
+const DEFAULT_LIMIT = 2.00;
 
 export default function BudgetEnforcer() {
   const [spent, setSpent] = useState(0.42);
+  const [budgetLimit, setBudgetLimit] = useState(DEFAULT_LIMIT);
   const [stats, setStats] = useState({
     gateLatency: 12,
-    inferenceLatency: 45
+    inferenceLatency: 45,
+    activeModel: 'DeepSeek-1.5B (Local)'
   });
 
   useEffect(() => {
     // Subscribe to real-time budget telemetry
     const unsubscribeBudget = socketService.subscribe('budget', (data) => {
       setSpent(data.spent);
+    });
+
+    // Subscribe to GA genome to get the dynamically evolved ceiling
+    const unsubscribeGenome = socketService.subscribe('genome', (data) => {
+      if (data.ceiling !== undefined) {
+        setBudgetLimit(Number(data.ceiling.toFixed(2)));
+      }
     });
 
     // Subscribe to real-time latency stats
@@ -25,18 +34,21 @@ export default function BudgetEnforcer() {
 
     return () => {
       unsubscribeBudget();
+      unsubscribeGenome();
       unsubscribeStats();
     };
   }, []);
 
-  const percentage = Math.min(100, (spent / BUDGET_LIMIT) * 100);
-  const isNearLimit = spent >= 1.5 && spent < 1.8;
-  const isLimitExceeded = spent >= BUDGET_LIMIT;
+  const percentage = Math.min(100, (spent / budgetLimit) * 100);
+  const warnThreshold = budgetLimit * 0.75;
+  const critThreshold = budgetLimit * 0.90;
+  const isNearLimit = spent >= warnThreshold && spent < critThreshold;
+  const isLimitExceeded = spent >= critThreshold;
 
-  // Chart data setup for semi-circle
+  // Chart data setup for semi-circle — uses dynamic GA ceiling
   const chartData = [
-    { name: 'Spent', value: Math.min(spent, BUDGET_LIMIT) },
-    { name: 'Remaining', value: Math.max(0, BUDGET_LIMIT - spent) }
+    { name: 'Spent', value: Math.min(spent, budgetLimit) },
+    { name: 'Remaining', value: Math.max(0, budgetLimit - spent) }
   ];
 
   const getEnforcerColor = () => {
@@ -73,17 +85,17 @@ export default function BudgetEnforcer() {
       </div>
 
       {/* Gauge Chart */}
-      <div style={{ position: 'relative', width: '100%', height: '140px', marginTop: '5px' }}>
+      <div style={{ position: 'relative', width: '100%', height: '150px', marginTop: '5px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={chartData}
               cx="50%"
-              cy="95%"
+              cy="90%"
               startAngle={180}
               endAngle={0}
-              innerRadius="70%"
-              outerRadius="90%"
+              innerRadius="65%"
+              outerRadius="88%"
               paddingAngle={0}
               dataKey="value"
               stroke="none"
@@ -96,17 +108,19 @@ export default function BudgetEnforcer() {
 
         <div style={{
           position: 'absolute',
-          bottom: '8%',
+          bottom: '4px',
           left: '50%',
           transform: 'translateX(-50%)',
           textAlign: 'center',
-          pointerEvents: 'none'
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap'
         }}>
           <div style={{ 
-            fontSize: '32px', 
+            fontSize: '28px', 
             fontWeight: '700', 
             color: '#fff',
-            textShadow: `0 0 12px ${activeColor}30`
+            textShadow: `0 0 12px ${activeColor}30`,
+            lineHeight: 1
           }}>
             ${spent.toFixed(2)}
           </div>
@@ -114,9 +128,10 @@ export default function BudgetEnforcer() {
             fontSize: '10px', 
             fontWeight: '600', 
             color: 'var(--text-secondary)',
-            letterSpacing: '1px'
+            letterSpacing: '1px',
+            marginTop: '2px'
           }}>
-            OF $2.00 HARD LIMIT
+            OF ${budgetLimit.toFixed(2)} CEILING
           </div>
         </div>
       </div>
@@ -218,24 +233,46 @@ export default function BudgetEnforcer() {
             </div>
           </div>
 
-          {/* Model Status Panel */}
+          {/* Live Active Model Panel */}
           <div style={{
-            background: 'rgba(255, 255, 255, 0.01)',
-            border: '1px solid rgba(255, 255, 255, 0.03)',
+            background: stats.activeModel?.includes('Escalated')
+              ? 'rgba(255, 77, 109, 0.05)'
+              : 'rgba(0, 255, 136, 0.03)',
+            border: `1px solid ${stats.activeModel?.includes('Escalated') ? 'rgba(255,77,109,0.3)' : 'rgba(0,255,136,0.15)'}`,
             borderRadius: '6px',
-            padding: '8px'
+            padding: '8px',
+            transition: 'all 0.5s ease'
           }}>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Server size={10} /> Model Core
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Server size={10} /> Active AI Core
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Engine:</span>
-                <span style={{ color: 'var(--neon-green)', fontWeight: '600' }}>Llamafile</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* Model indicator dot + name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                  background: stats.activeModel?.includes('Escalated') ? '#ff4d6d' : '#00ff88',
+                  boxShadow: stats.activeModel?.includes('Escalated')
+                    ? '0 0 8px #ff4d6d'
+                    : '0 0 8px #00ff88',
+                  animation: 'pulse 1s ease-in-out infinite'
+                }} />
+                <span style={{
+                  color: stats.activeModel?.includes('Escalated') ? '#ff4d6d' : '#00ff88',
+                  fontWeight: '700', fontSize: '11px', wordBreak: 'break-word'
+                }}>
+                  {stats.activeModel || 'DeepSeek-1.5B (Local)'}
+                </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Version:</span>
-                <span style={{ color: '#fff' }}>0.8.2</span>
+              {/* Mode label */}
+              <div style={{
+                fontSize: '9px',
+                color: stats.activeModel?.includes('Escalated') ? '#ff4d6d' : 'var(--text-muted)',
+                fontStyle: 'italic'
+              }}>
+                {stats.activeModel?.includes('Escalated')
+                  ? '⚠ ESCALATED — Heavy reasoning active'
+                  : '✓ LOCAL — Low-cost inference mode'}
               </div>
             </div>
           </div>

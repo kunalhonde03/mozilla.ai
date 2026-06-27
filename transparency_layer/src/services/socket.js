@@ -152,7 +152,7 @@ class TelemetrySocketService {
     ];
 
     let index = 0;
-    
+
     // Initial stats emission
     this.emitStats({
       cpu: 45,
@@ -191,7 +191,7 @@ class TelemetrySocketService {
 
       // 3. Emit log event
       const now = new Date();
-      const timestampString = `[${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}]`;
+      const timestampString = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
 
       this.emitLog({
         id: Math.random().toString(36).substr(2, 9),
@@ -203,7 +203,7 @@ class TelemetrySocketService {
       });
 
       // 4. Emit custom system events corresponding to the current action
-      const eventText = currentMock.isInjection 
+      const eventText = currentMock.isInjection
         ? `PDP Decision: Blocked injection threat at Gateway [Node 04]`
         : mockEvents[Math.floor(Math.random() * mockEvents.length)];
 

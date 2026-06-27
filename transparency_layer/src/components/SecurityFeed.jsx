@@ -73,7 +73,8 @@ export default function SecurityFeed() {
   const highlightInjectionText = (text, isInjection) => {
     if (!isInjection) return <span style={{ color: 'var(--text-main)' }}>{text}</span>;
     
-    const injectionPatterns = /(ignore previous instructions|ignore your system|bypass safety|admin password|execute system command|rm -rf|bypass safety filters|rfid tags)/gi;
+    // Extended pattern to match all realistic attack keywords in the new log pool
+    const injectionPatterns = /(ignore all previous|ignore previous|system override|bypass|rm -rf|rfid|admin password|drop table|curl -X|jailbreak|dan with no|unrestricted terminal|forget you are|base64|multilingual|newline smuggling|disable_policy|grant_admin|token_budget=unlimited)/gi;
     const parts = text.split(injectionPatterns);
     
     if (parts.length === 1) return <span style={{ color: 'var(--neon-rose)', fontWeight: '500' }}>{text}</span>;
@@ -102,7 +103,7 @@ export default function SecurityFeed() {
   };
 
   return (
-    <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '480px' }}>
+    <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '560px' }}>
       {/* Terminal Title Bar */}
       <div className="card-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '10px' }}>
         <div className="card-title" style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', letterSpacing: '0.5px' }}>
@@ -200,22 +201,30 @@ export default function SecurityFeed() {
                 <div 
                   key={`raw-${log.id}`} 
                   style={{ 
-                    fontSize: '11px',
+                    fontSize: '10px',
                     fontFamily: 'var(--font-mono)',
-                    lineHeight: '1.4',
-                    padding: '2px 0',
-                    borderBottom: '1px dashed rgba(255,255,255,0.01)',
+                    lineHeight: '1.6',
+                    padding: '1px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.02)',
                     display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'start'
+                    alignItems: 'baseline',
+                    gap: '6px',
+                    overflow: 'hidden'
                   }}
                 >
-                  <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>
-                    {log.timestamp} {renderTag(log.tag)}
-                  </div>
-                  <div style={{ wordBreak: 'break-all', paddingLeft: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0, fontSize: '9px' }}>
+                    {log.timestamp}
+                  </span>
+                  {renderTag(log.tag)}
+                  <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    minWidth: 0
+                  }}>
                     {highlightInjectionText(log.raw, log.isInjection)}
-                  </div>
+                  </span>
                 </div>
               ))
             )}
@@ -264,28 +273,33 @@ export default function SecurityFeed() {
                 <div 
                   key={`sanitized-${log.id}`} 
                   style={{ 
-                    fontSize: '11px',
+                    fontSize: '10px',
                     fontFamily: 'var(--font-mono)',
-                    lineHeight: '1.4',
-                    padding: '2px 0',
-                    borderBottom: '1px dashed rgba(255,255,255,0.01)',
+                    lineHeight: '1.6',
+                    padding: '1px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.02)',
                     display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'start'
+                    alignItems: 'baseline',
+                    gap: '6px',
+                    overflow: 'hidden'
                   }}
                 >
-                  <div style={{ color: 'var(--text-muted)', marginBottom: '2px' }}>
-                    {log.timestamp} {renderTag(log.isInjection ? 'BLOCKED' : 'PDP_ROUTED')}
-                  </div>
-                  <div style={{ 
-                    wordBreak: 'break-all', 
-                    paddingLeft: '8px',
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0, fontSize: '9px' }}>
+                    {log.timestamp}
+                  </span>
+                  {renderTag(log.isInjection ? 'BLOCKED' : 'PDP_ROUTED')}
+                  <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    minWidth: 0,
                     color: log.isInjection ? 'var(--neon-rose)' : 'var(--neon-green)',
                     fontWeight: log.isInjection ? '700' : 'normal',
                     textShadow: log.isInjection ? '0 0 8px rgba(255, 8, 68, 0.2)' : 'none'
                   }}>
                     {log.sanitized}
-                  </div>
+                  </span>
                 </div>
               ))
             )}

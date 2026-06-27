@@ -5,6 +5,7 @@ import BudgetEnforcer from './components/BudgetEnforcer';
 import SecurityFeed from './components/SecurityFeed';
 import TopologyVisualizer from './components/TopologyVisualizer';
 import EventsLog from './components/EventsLog';
+import LogAuditor from './components/LogAuditor';
 
 export default function App() {
   const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
@@ -95,9 +96,9 @@ export default function App() {
           <div>
             <h1 style={{ fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               OtariGuard <span className="logo-accent">FinOps</span>
-              <span style={{ 
-                fontSize: '9px', 
-                border: '1px solid rgba(0, 242, 254, 0.3)', 
+              <span style={{
+                fontSize: '9px',
+                border: '1px solid rgba(0, 242, 254, 0.3)',
                 color: 'var(--neon-cyan)',
                 padding: '2px 6px',
                 borderRadius: '4px',
@@ -135,7 +136,7 @@ export default function App() {
           </div>
 
           {/* Config Controls */}
-          <button 
+          <button
             className="btn btn-secondary"
             onClick={() => setShowConfig(!showConfig)}
             title="Configure Connection"
@@ -146,10 +147,10 @@ export default function App() {
           </button>
 
           {/* Simulator Toggle Button */}
-          <button 
-            className="btn" 
+          <button
+            className="btn"
             onClick={toggleSimulation}
-            style={{ 
+            style={{
               borderColor: isSimulating ? 'var(--neon-yellow)' : 'var(--neon-cyan)',
               color: isSimulating ? 'var(--neon-yellow)' : 'var(--neon-cyan)',
               background: isSimulating ? 'rgba(255, 210, 0, 0.04)' : 'rgba(0, 242, 254, 0.04)',
@@ -172,8 +173,8 @@ export default function App() {
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Server size={14} style={{ position: 'absolute', left: '10px', color: 'var(--text-secondary)' }} />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={socketUrl}
                   onChange={(e) => setSocketUrl(e.target.value)}
                   style={{
@@ -195,9 +196,9 @@ export default function App() {
                 <Radio size={14} />
                 CONNECT_LIVE
               </button>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={() => {
                   setIsSimulating(true);
                   socketService.enableSimulation(true);
@@ -220,30 +221,33 @@ export default function App() {
 
           {/* Actionable System Journal Event Log */}
           <EventsLog />
-          
+
           {/* Security Log Feed */}
           <SecurityFeed />
         </div>
 
-        {/* Right Column (Wallet Enforcer + Architecture details) */}
-        <div className="right-column">
+        {/* Right Column (Wallet Enforcer + Log Auditor + Architecture details) */}
+        <div className="right-column" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Wallet Enforcer Gauge & Latency Table */}
           <BudgetEnforcer />
 
+          {/* Log Auditor Portal */}
+          <LogAuditor />
+
           {/* Quick Specs / Transparency details */}
-          <div className="glass-panel" style={{ padding: '20px', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="card-header" style={{ marginBottom: '4px' }}>
               <div className="card-title" style={{ fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
                 GATEWAY_POLICY_SPECIFICATIONS
               </div>
             </div>
-            
+
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <p style={{ lineHeight: '1.5' }}>
-                Active safety enforcer filters incoming prompt token packages at the gateway. 
+                Active safety enforcer filters incoming prompt token packages at the gateway.
                 Downstream local inference cores are shielded from malicious system prompt manipulations.
               </p>
-              
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
                 <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>ENGINE_TYPE</div>
@@ -263,8 +267,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ 
-                borderTop: '1px dashed rgba(255, 255, 255, 0.08)', 
+              <div style={{
+                borderTop: '1px dashed rgba(255, 255, 255, 0.08)',
                 paddingTop: '12px',
                 fontSize: '12px',
                 lineHeight: '1.4'

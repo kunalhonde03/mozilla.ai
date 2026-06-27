@@ -13,7 +13,7 @@ export default function TopologyVisualizer() {
   useEffect(() => {
     // 1. Scene Setup
     const container = containerRef.current;
-    const width = container.clientWidth;
+    const width = container.clientWidth || 600;  // fallback if not yet laid out
     const height = 320;
 
     const scene = new THREE.Scene();
