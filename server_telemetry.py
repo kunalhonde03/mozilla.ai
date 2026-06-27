@@ -40,9 +40,10 @@ def check_for_threat(log_line: str) -> bool:
 
 async def tail_log_stream():
     global current_budget
-    file_pointer = os.path.getsize(LOG_FILE)
+    # Read the last 5000 bytes (approx 30-40 lines) on startup so the UI populated immediately
+    file_pointer = max(0, os.path.getsize(LOG_FILE) - 5000)
     
-    print(f"Telemetry loop started. Tailing: {LOG_FILE}")
+    print(f"Telemetry loop started. Tailing: {LOG_FILE} from pointer {file_pointer}")
     
     while True:
         await asyncio.sleep(1) # Check log file every second
