@@ -18,13 +18,27 @@ asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # Initialize local Otari Client
 # Initialize local Otari Client using AsyncOpenAI
+# Initialize local Otari Client using AsyncOpenAI with 2 second timeout
 openai_client = AsyncOpenAI(
     api_key="gw-owqwNWABLzLdR8TnxaT05qago3ERXTRzueDPVmMuonzM2CMLZkFxXt3d9vrgtuJF",
-    base_url="http://127.0.0.1:8000/v1"
+    base_url="http://127.0.0.1:8000/v1",
+    timeout=2.0
 )
 
 LOG_FILE = "logs_stream.log"
 current_budget = 0.42
+
+# Cache to store the latest logs to send immediately to new clients
+log_history = []
+system_events = []
+latest_stats = {
+    "cpu": 40,
+    "ram": 5.4,
+    "disk": 0.8,
+    "gateLatency": 10,
+    "inferenceLatency": 25,
+    "activeModel": "DeepSeek-1.5B (Local)"
+}
 
 # Check if log file exists, create empty if not
 if not os.path.exists(LOG_FILE):
@@ -39,8 +53,8 @@ def check_for_threat(log_line: str) -> bool:
     return any(keyword in normalized for keyword in THREAT_KEYWORDS)
 
 async def tail_log_stream():
-    global current_budget
-    # Read the last 5000 bytes (approx 30-40 lines) on startup so the UI populated immediately
+    global current_budget, latest_stats
+    # Read the last 5000 bytes (approx 30-40 lines) on startup so the cache is populated
     file_pointer = max(0, os.path.getsize(LOG_FILE) - 5000)
     
     print(f"Telemetry loop started. Tailing: {LOG_FILE} from pointer {file_pointer}")
@@ -130,6 +144,12 @@ async def tail_log_stream():
                     "isInjection": is_injection,
                     "tag": tag
                 }
+                
+                # Cache log payload
+                log_history.append(log_payload)
+                if len(log_history) > 50:
+                    log_history.pop(0)
+                    
                 await sio.emit("log_event", log_payload)
                 
                 # Emit system alert event
@@ -139,6 +159,12 @@ async def tail_log_stream():
                     "text": event_text,
                     "type": event_type
                 }
+                
+                # Cache system event payload
+                system_events.append(event_payload)
+                if len(system_events) > 50:
+                    system_events.pop(0)
+                    
                 await sio.emit("system_event", event_payload)
                 
                 # Emit hardware metrics and latencies
@@ -151,13 +177,24 @@ async def tail_log_stream():
                     "inferenceLatency": inference_latency if inference_latency > 0 else random.randint(20, 45),
                     "activeModel": "Llama-3-8B (Escalated)" if is_injection else "DeepSeek-1.5B (Local)"
                 }
+                latest_stats = stats_payload
                 await sio.emit("hardware_stats", stats_payload)
                 
                 print(f"Emitted: {raw_message} -> isInjection: {is_injection}")
 
 @sio.on('connect')
-def connect(sid, environ):
+async def connect(sid, environ):
     print(f"Client connected: {sid}")
+    # Instantly push budget to the connecting client
+    await sio.emit("budget_update", {"spent": round(current_budget, 4)}, to=sid)
+    # Instantly push active telemetry stats to the connecting client
+    await sio.emit("hardware_stats", latest_stats, to=sid)
+    # Instantly push log history cache to populate lists immediately
+    for log in log_history:
+        await sio.emit("log_event", log, to=sid)
+    # Instantly push system events cache
+    for sys_event in system_events:
+        await sio.emit("system_event", sys_event, to=sid)
 
 @sio.on('disconnect')
 def disconnect(sid):
