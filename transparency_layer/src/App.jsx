@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Settings, Server, Radio, Play, Pause, Cpu, HardDrive, CircleDot } from 'lucide-react';
+import { Shield, Settings, Server, Radio, Play, Pause, Cpu, HardDrive, CircleDot, Database } from 'lucide-react';
 import socketService from './services/socket';
 import BudgetEnforcer from './components/BudgetEnforcer';
 import SecurityFeed from './components/SecurityFeed';
 import TopologyVisualizer from './components/TopologyVisualizer';
 import EventsLog from './components/EventsLog';
+import SandboxModal from './components/SandboxModal';
+import ExplainabilityView from './components/ExplainabilityView';
 
 export default function App() {
   const [isSimulating, setIsSimulating] = useState(true);
   const [socketUrl, setSocketUrl] = useState('http://localhost:5000');
   const [showConfig, setShowConfig] = useState(false);
+  const [isSandboxOpen, setIsSandboxOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [hwStats, setHwStats] = useState({
     cpu: 45,
@@ -130,6 +133,24 @@ export default function App() {
             )}
           </div>
 
+          {/* Developer Sandbox Button */}
+          <button 
+            className="btn"
+            onClick={() => setIsSandboxOpen(true)}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontSize: '12px', 
+              borderColor: 'var(--neon-green)', 
+              color: 'var(--neon-green)', 
+              background: 'rgba(0, 245, 160, 0.04)' 
+            }}
+          >
+            <Database size={13} />
+            SANDBOX
+          </button>
+
           {/* Config Controls */}
           <button 
             className="btn btn-secondary"
@@ -221,13 +242,16 @@ export default function App() {
           <SecurityFeed />
         </div>
 
-        {/* Right Column (Wallet Enforcer + Architecture details) */}
+        {/* Right Column (Wallet Enforcer + Sandbox Explainability View + Specs) */}
         <div className="right-column">
           {/* Wallet Enforcer Gauge & Latency Table */}
           <BudgetEnforcer />
 
+          {/* Sandbox Explainability View (Side-by-Side Ingress vs Egress) */}
+          <ExplainabilityView />
+
           {/* Quick Specs / Transparency details */}
-          <div className="glass-panel" style={{ padding: '20px', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="card-header" style={{ marginBottom: '4px' }}>
               <div className="card-title" style={{ fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
                 GATEWAY_POLICY_SPECIFICATIONS
@@ -258,24 +282,15 @@ export default function App() {
                   <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>IO_POLLING</div>
                 </div>
               </div>
-
-              <div style={{ 
-                borderTop: '1px dashed rgba(255, 255, 255, 0.08)', 
-                paddingTop: '12px',
-                fontSize: '12px',
-                lineHeight: '1.4'
-              }}>
-                <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>
-                  TRANSPARENCY_AUDITING_POLICY
-                </span>
-                Prompts containing security vulnerabilities are blocked immediately at the gateway interface, preventing downstream GPU runtime utilization.
-              </div>
             </div>
           </div>
         </div>
       </main>
 
-      {/* COMMAND AND CONTROL BOTOM HARDWARE STATUS BAR */}
+      {/* Sandbox Modal */}
+      <SandboxModal isOpen={isSandboxOpen} onClose={() => setIsSandboxOpen(false)} />
+
+      {/* COMMAND AND CONTROL BOTTOM HARDWARE STATUS BAR */}
       <footer style={{
         position: 'fixed',
         bottom: 0,
