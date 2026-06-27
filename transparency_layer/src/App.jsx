@@ -9,6 +9,7 @@ import SandboxModal from './components/SandboxModal';
 import ExplainabilityView from './components/ExplainabilityView';
 
 export default function App() {
+  const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
   const [isSimulating, setIsSimulating] = useState(true);
   const [socketUrl, setSocketUrl] = useState('http://localhost:5000');
   const [showConfig, setShowConfig] = useState(false);
@@ -38,6 +39,9 @@ export default function App() {
         ram: data.ram,
         disk: data.disk
       });
+      if (data.activeModel) {
+        setActiveModel(data.activeModel);
+      }
     });
 
     const interval = setInterval(handleBudgetStatus, 1000);
@@ -271,7 +275,7 @@ export default function App() {
                 </div>
                 <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>MODEL_TARGET</div>
-                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>Llama-3-8B-Instruct</div>
+                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '600', marginTop: '2px' }}>{activeModel}</div>
                 </div>
                 <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '4px' }}>
                   <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>HARD_TOKEN_LIMIT</div>
