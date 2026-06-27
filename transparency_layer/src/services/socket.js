@@ -163,9 +163,9 @@ class TelemetrySocketService {
     });
 
     this.simInterval = setInterval(() => {
+      const currentMock = mockPrompts[index];
       // 1. Simulate budget increment
       if (this.currentBudget < 2.0) {
-        const currentMock = mockPrompts[index];
         const cost = currentMock.isInjection ? 0.005 : (Math.random() * 0.08 + 0.01);
         this.currentBudget = Math.min(2.0, this.currentBudget + cost);
       } else {
