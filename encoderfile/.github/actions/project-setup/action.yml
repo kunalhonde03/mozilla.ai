@@ -1,0 +1,79 @@
+name: "Project Setup"
+description: "Shared environment setup for CI"
+
+inputs:
+  toolchain:
+    description: "Rust toolchain to install"
+    required: false
+    default: "stable"
+  target:
+    description: "Additional Rust target to install"
+    required: false
+    default: ""
+  python_version:
+    description: "Python version to use"
+    required: false
+    default: "3.13"
+
+runs:
+  using: "composite"
+  steps:
+    # Rust toolchain
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        target: ${{ inputs.target }}
+
+    # Python
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    # ----- OS-Specific System Dependencies -----
+
+    # Linux deps
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          protobuf-compiler \
+          libssl-dev \
+          pkg-config \
+          cmake \
+          zlib1g-dev \
+          libdw-dev \
+          binutils-dev \
+          libelf-dev
+
+    # macOS deps (Homebrew)
+    - name: Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew update
+        brew install \
+          protobuf \
+          openssl@3 \
+          pkg-config \
+          cmake \
+          zlib \
+          libelf \
+          binutils || true  # binutils conflicts with Apple toolchain, so ignore failure
+
+    # ----- Universal steps -----
+
+    - name: Install uv
+      shell: bash
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install cargo-binstall
+      shell: bash
+      run: |
+        curl -L https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+    - name: Install just
+      uses: extractions/setup-just@v3
+      with:
+        just-version: 1.46.0

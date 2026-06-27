@@ -1,0 +1,282 @@
+import uuid
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Index
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    """Base class for SQLAlchemy models."""
+
+
+def _epoch_seconds(value: datetime | None) -> int | None:
+    """Return a UTC epoch from a stored datetime.
+
+    SQLite hands datetimes back naive; ``datetime.timestamp()`` would then read
+    them as local time and skew the epoch by the server's UTC offset. Treat a
+    naive value as the UTC it was stored as before converting.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return int(value.timestamp())
+
+
+class APIKey(Base):
+    """API Key model for authentication and authorization."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(primary_key=True)
+    key_hash: Mapped[str] = mapped_column(unique=True, index=True)
+    key_name: Mapped[str | None] = mapped_column()
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    user = relationship("User", back_populates="api_keys")
+    usage_logs = relationship("UsageLog", back_populates="api_key", passive_deletes=True)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "key_name": self.key_name,
+            "user_id": self.user_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "is_active": self.is_active,
+            "metadata": self.metadata_,
+        }
+
+
+class Budget(Base):
+    """Budget model for spending limits."""
+
+    __tablename__ = "budgets"
+
+    budget_id: Mapped[str] = mapped_column(primary_key=True, default=lambda: str(uuid.uuid4()))
+    max_budget: Mapped[float | None] = mapped_column()
+    budget_duration_sec: Mapped[int | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    users = relationship("User", back_populates="budget")
+    reset_logs = relationship("BudgetResetLog", back_populates="budget")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "budget_id": self.budget_id,
+            "max_budget": self.max_budget,
+            "budget_duration_sec": self.budget_duration_sec,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class User(Base):
+    """User/Customer model for end-user tracking."""
+
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(primary_key=True)
+    alias: Mapped[str | None] = mapped_column()
+    spend: Mapped[float] = mapped_column(default=0.0)
+    # In-flight budget held by requests that have passed the budget gate but
+    # whose actual cost is not yet known. The effective committed amount is
+    # ``spend + reserved``; reservations are reconciled into ``spend`` (actual
+    # cost) on success or released on failure. See gateway.services.budget_service.
+    reserved: Mapped[float] = mapped_column(default=0.0, server_default="0")
+    budget_id: Mapped[str | None] = mapped_column(ForeignKey("budgets.budget_id"))
+    budget_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_budget_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    blocked: Mapped[bool] = mapped_column(default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    budget = relationship("Budget", back_populates="users")
+    api_keys = relationship("APIKey", back_populates="user", passive_deletes=True)
+    usage_logs = relationship("UsageLog", back_populates="user", passive_deletes=True)
+    reset_logs = relationship("BudgetResetLog", back_populates="user", passive_deletes=True)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "user_id": self.user_id,
+            "alias": self.alias,
+            "spend": self.spend,
+            "reserved": self.reserved,
+            "budget_id": self.budget_id,
+            "budget_started_at": self.budget_started_at.isoformat() if self.budget_started_at else None,
+            "next_budget_reset_at": self.next_budget_reset_at.isoformat() if self.next_budget_reset_at else None,
+            "blocked": self.blocked,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "metadata": self.metadata_,
+        }
+
+
+class ModelPricing(Base):
+    """Model pricing configuration."""
+
+    __tablename__ = "model_pricing"
+
+    model_key: Mapped[str] = mapped_column(primary_key=True)
+    effective_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        primary_key=True,
+        default=lambda: datetime.now(UTC),
+    )
+    input_price_per_million: Mapped[float] = mapped_column()
+    output_price_per_million: Mapped[float] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "model_key": self.model_key,
+            "effective_at": self.effective_at.isoformat() if self.effective_at else None,
+            "input_price_per_million": self.input_price_per_million,
+            "output_price_per_million": self.output_price_per_million,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class UsageLog(Base):
+    """Usage log model for tracking API requests."""
+
+    __tablename__ = "usage_logs"
+    __table_args__ = (Index("ix_usage_logs_user_id_timestamp", "user_id", "timestamp"),)
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=lambda: str(uuid.uuid4()))
+    api_key_id: Mapped[str | None] = mapped_column(ForeignKey("api_keys.id", ondelete="SET NULL"), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id", ondelete="SET NULL"), index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+
+    model: Mapped[str] = mapped_column()
+    provider: Mapped[str | None] = mapped_column()
+    endpoint: Mapped[str] = mapped_column()
+
+    prompt_tokens: Mapped[int | None] = mapped_column()
+    completion_tokens: Mapped[int | None] = mapped_column()
+    total_tokens: Mapped[int | None] = mapped_column()
+    cache_read_tokens: Mapped[int | None] = mapped_column()
+    cache_write_tokens: Mapped[int | None] = mapped_column()
+    cost: Mapped[float | None] = mapped_column()
+
+    status: Mapped[str] = mapped_column()
+    error_message: Mapped[str | None] = mapped_column()
+
+    api_key = relationship("APIKey", back_populates="usage_logs")
+    user = relationship("User", back_populates="usage_logs")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "api_key_id": self.api_key_id,
+            "user_id": self.user_id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "model": self.model,
+            "endpoint": self.endpoint,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "cache_read_tokens": self.cache_read_tokens,
+            "cache_write_tokens": self.cache_write_tokens,
+            "cost": self.cost,
+            "status": self.status,
+            "error_message": self.error_message,
+        }
+
+
+class FileObject(Base):
+    """Uploaded file metadata for the OpenAI-compatible /v1/files API.
+
+    The raw bytes live in a pluggable blob backend (see
+    gateway.services.file_store); this row holds metadata plus the backend
+    ``storage_ref`` used to fetch them. Files are scoped to ``user_id`` for
+    tenant isolation and soft-deleted via ``deleted_at``.
+    """
+
+    __tablename__ = "file_objects"
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=lambda: f"file-{uuid.uuid4().hex}")
+    # Always set to the authenticated user; non-null enforces the user-scoping
+    # contract at the schema level. CASCADE removes a user's files on delete.
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column()
+    mime_type: Mapped[str] = mapped_column()
+    bytes: Mapped[int] = mapped_column()
+    purpose: Mapped[str] = mapped_column(default="user_data")
+    storage_ref: Mapped[str] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None, index=True)
+
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to the OpenAI file object shape."""
+        return {
+            "id": self.id,
+            "object": "file",
+            "bytes": self.bytes,
+            "created_at": _epoch_seconds(self.created_at),
+            "expires_at": _epoch_seconds(self.expires_at),
+            "filename": self.filename,
+            "purpose": self.purpose,
+        }
+
+
+class BudgetResetLog(Base):
+    """Budget reset log model for tracking budget resets."""
+
+    __tablename__ = "budget_reset_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id", ondelete="SET NULL"), index=True)
+    budget_id: Mapped[str] = mapped_column(ForeignKey("budgets.budget_id"))
+    previous_spend: Mapped[float] = mapped_column()
+    reset_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    next_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="reset_logs")
+    budget = relationship("Budget", back_populates="reset_logs")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "budget_id": self.budget_id,
+            "previous_spend": self.previous_spend,
+            "reset_at": self.reset_at.isoformat() if self.reset_at else None,
+            "next_reset_at": self.next_reset_at.isoformat() if self.next_reset_at else None,
+        }

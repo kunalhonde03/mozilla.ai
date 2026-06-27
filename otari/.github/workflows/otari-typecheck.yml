@@ -1,0 +1,40 @@
+name: Otari Typecheck
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/gateway/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/otari-typecheck.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/gateway/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/otari-typecheck.yml'
+  workflow_dispatch:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      with:
+        python-version: 3.14
+        activate-environment: true
+
+    - name: Install dependencies
+      run: uv sync --dev --frozen
+
+    - name: Run mypy type check
+      run: make typecheck

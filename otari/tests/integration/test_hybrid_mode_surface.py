@@ -1,0 +1,110 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from gateway.api.deps import reset_config
+from gateway.core.config import GatewayConfig
+from gateway.core.database import reset_db
+from gateway.main import create_app
+
+
+def test_hybrid_mode_starts_without_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTARI_AI_TOKEN", "gw_test_token")
+
+    config = GatewayConfig(
+        mode="hybrid",
+        database_url="postgresql://127.0.0.1:1/does-not-exist",
+        platform={"base_url": "http://localhost:8100/api/v1"},
+    )
+    app = create_app(config)
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "healthy"
+    assert payload["mode"] == "hybrid"
+    assert payload["platform_reachable"] in {"yes", "no"}
+
+    reset_config()
+    reset_db()
+
+
+def test_hybrid_mode_disables_local_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTARI_AI_TOKEN", "gw_test_token")
+
+    config = GatewayConfig(
+        mode="hybrid",
+        platform={"base_url": "http://localhost:8100/api/v1"},
+    )
+    app = create_app(config)
+
+    with TestClient(app) as client:
+        users_response = client.post("/v1/users", json={"user_id": "u1"})
+        keys_response = client.get("/v1/keys")
+        budgets_response = client.get("/v1/budgets")
+        spend_response = client.get("/v1/spend")
+
+    expected = {"detail": "This endpoint is not available in hybrid mode. Manage this resource via the platform UI."}
+    assert users_response.status_code == 404
+    assert users_response.json() == expected
+    assert keys_response.status_code == 404
+    assert keys_response.json() == expected
+    assert budgets_response.status_code == 404
+    assert budgets_response.json() == expected
+    assert spend_response.status_code == 404
+    assert spend_response.json() == expected
+
+    reset_config()
+    reset_db()
+
+
+def test_hybrid_mode_health_reports_reachability(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTARI_AI_TOKEN", "gw_test_token")
+
+    async def _reachable(_: GatewayConfig) -> bool:
+        return True
+
+    monkeypatch.setattr("gateway.api.routes.health._check_platform_reachability", _reachable)
+
+    config = GatewayConfig(
+        mode="hybrid",
+        platform={"base_url": "http://localhost:8100/api/v1"},
+    )
+    app = create_app(config)
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+        readiness_response = client.get("/health/readiness")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy", "mode": "hybrid", "platform_reachable": "yes"}
+    assert readiness_response.status_code == 200
+    assert readiness_response.json()["platform"] == "connected"
+
+    reset_config()
+    reset_db()
+
+
+def test_hybrid_mode_readiness_fails_when_platform_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTARI_AI_TOKEN", "gw_test_token")
+
+    async def _unreachable(_: GatewayConfig) -> bool:
+        return False
+
+    monkeypatch.setattr("gateway.api.routes.health._check_platform_reachability", _unreachable)
+
+    config = GatewayConfig(
+        mode="hybrid",
+        platform={"base_url": "http://localhost:8100/api/v1"},
+    )
+    app = create_app(config)
+
+    with TestClient(app) as client:
+        response = client.get("/health/readiness")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["platform"] == "unavailable"
+
+    reset_config()
+    reset_db()

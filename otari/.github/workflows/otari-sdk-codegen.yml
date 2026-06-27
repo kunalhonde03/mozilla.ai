@@ -1,0 +1,130 @@
+name: Otari SDK Codegen
+
+# Regenerates the full typed SDK client core (every endpoint: inference + control
+# plane) from the Otari's OpenAPI spec and opens a PR against each language SDK
+# repo. Each SDK wraps this generated core with a hand-written shell (streaming,
+# typed error mapping, ergonomic methods); that shell is not regenerated here
+# (see scripts/sdk_codegen/README.md).
+#
+# Requires a repository secret SDK_CODEGEN_TOKEN: a fine-grained PAT or GitHub App
+# installation token with Contents:write and Pull-requests:write on
+# mozilla-ai/otari-sdk-{python,ts,go,rust}. The default GITHUB_TOKEN cannot push
+# to other repositories.
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'docs/public/openapi.json'
+      - 'scripts/sdk_codegen/**'
+      - 'openapitools.json'
+      - '.github/workflows/otari-sdk-codegen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The OpenAPI Generator version is pinned in openapitools.json
+# (generator-cli.version). That file is the ONLY mechanism the
+# @openapitools/openapi-generator-cli wrapper honors; the OPENAPI_GENERATOR_VERSION
+# env var is ignored by the wrapper and must not be relied on. Bump the generator
+# by editing openapitools.json deliberately and reviewing the resulting diff.
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Keep this matrix in sync with FULL_TARGETS in scripts/sdk_codegen/generate.py.
+      matrix:
+        include:
+          - language: python
+            sdk_repo: mozilla-ai/otari-sdk-python
+            target_path: src/otari/_client
+          - language: typescript
+            sdk_repo: mozilla-ai/otari-sdk-ts
+            target_path: src/_client
+          - language: go
+            sdk_repo: mozilla-ai/otari-sdk-go
+            target_path: otari/client
+          - language: rust
+            sdk_repo: mozilla-ai/otari-sdk-rust
+            target_path: src/_client
+
+    steps:
+      - name: Checkout Otari
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: 3.14
+          activate-environment: true
+
+      - name: Install Otari deps
+        run: uv sync --dev --frozen
+
+      - name: Set up Java (OpenAPI Generator runtime)
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install OpenAPI Generator CLI
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Install rustfmt (rust core is inlined and formatted in place)
+        if: matrix.language == 'rust'
+        # Pinned to the stable branch tip (immutable SHA); the action still
+        # installs the latest stable toolchain at runtime.
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt
+
+      - name: Generate ${{ matrix.language }} client (full typed core)
+        # On a release, stamp the release version as the spec version into the
+        # generated core so each SDK can surface the Otari/spec version it was
+        # generated from. The leading "v" is stripped so the stamp is clean semver
+        # (matching how the SDK publish flows derive the version from the tag). On
+        # spec-change pushes there is no release tag, so the spec's own
+        # info.version is used.
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          args=(--language "${{ matrix.language }}" --mode full --out-dir dist)
+          if [ -n "${RELEASE_TAG}" ]; then
+            args+=(--spec-version "${RELEASE_TAG#v}")
+          fi
+          uv run python scripts/sdk_codegen/generate.py "${args[@]}"
+
+      - name: Checkout ${{ matrix.sdk_repo }}
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: ${{ matrix.sdk_repo }}
+          token: ${{ secrets.SDK_CODEGEN_TOKEN }}
+          path: sdk-repo
+
+      - name: Sync generated client into the SDK repo
+        run: |
+          target="sdk-repo/${{ matrix.target_path }}"
+          rm -rf "$target"
+          mkdir -p "$(dirname "$target")"
+          cp -r "dist/${{ matrix.language }}" "$target"
+
+      - name: Open PR on ${{ matrix.sdk_repo }}
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.SDK_CODEGEN_TOKEN }}
+          path: sdk-repo
+          branch: sdk-codegen/client-core
+          delete-branch: true
+          commit-message: "chore: regenerate SDK client core from Otari OpenAPI spec"
+          title: "Regenerate SDK client core from Otari OpenAPI spec"
+          body: |
+            Automated regeneration of the generated typed client core (all
+            endpoints) from the Otari OpenAPI spec. The hand-written shell
+            (streaming, error mapping, ergonomic methods) is unaffected.
+
+            Source: ${{ github.repository }}@${{ github.sha }}
+            Generated by `.github/workflows/otari-sdk-codegen.yml`.

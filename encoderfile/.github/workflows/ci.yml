@@ -1,0 +1,93 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - CONTRIBUTING.md
+      - CODE_OF_CONDUCT.md
+      - README.md
+      - mkdocs.yml
+      - examples/**
+      - .vscode/**
+      - scripts/**
+  pull_request:
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - CONTRIBUTING.md
+      - CODE_OF_CONDUCT.md
+      - README.md
+      - mkdocs.yml
+      - examples/**
+      - .vscode/**
+      - scripts/**
+  workflow_dispatch:
+
+jobs:
+  run_unit_tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+
+      - name: Cache image classification model
+        id: cache-img-model
+        uses: actions/cache@v4
+        with:
+          path: models/image_classification/model.onnx
+          key: img-class-model
+
+      - name: Download ONNX model
+        if: steps.cache-img-model.outputs.cache-hit != 'true'
+        run: |
+          curl -L -o models/image_classification/model.onnx https://huggingface.co/dima806/yoga_pose_image_classification/resolve/main/onnx/model.onnx
+
+      - name: Project setup
+        uses: ./.github/actions/project-setup
+      
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        run: cargo binstall cargo-llvm-cov --force --no-confirm
+
+      - name: Generate coverage
+        run: just coverage
+
+      - name: Upload to codecov
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+
+      - name: Project setup
+        uses: ./.github/actions/project-setup
+        with:
+          toolchain: nightly
+      
+      - run: rustup component add --toolchain nightly-x86_64-unknown-linux-gnu clippy
+
+      - name: Run Clippy
+        run: just lint

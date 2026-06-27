@@ -1,0 +1,97 @@
+# Configuration for Otari
+
+# Database connection URL
+database_url: "postgresql://otari:otari@postgres:5432/otari"
+
+# Server configuration - if you want to use a different port, change it here and in the docker-compose.yml file.
+host: "0.0.0.0"
+port: 8000
+
+# Master key for protecting key management endpoints
+master_key: YOUR_MASTER_KEY_HERE
+
+# Per-user rate limiting (requests per minute). Omit or set to null to disable.
+# rate_limit_rpm: 60
+
+# Prometheus metrics endpoint at /metrics. Set to true to enable.
+# enable_metrics: true
+
+# --- File uploads & document understanding ---------------------------------
+# The /v1/files endpoints accept uploads; the gateway then resolves file/image
+# content blocks in chat requests. For models that natively understand
+# documents/images the blocks pass through unchanged; for text-only local
+# models the gateway extracts the file to text (and captions images) so the
+# model can still "read" the attachment.
+# files_enabled: true
+# files_backend: "local"            # blob backend for raw bytes ('local' only today)
+# files_local_dir: "./otari-files"  # where the local backend stores bytes
+# files_max_bytes: 536870912        # 512 MB upload cap
+# files_retention_hours: 168        # stop serving files after N hours; 404 thereafter (omit = keep).
+                                    # Bytes are not auto-reclaimed yet; periodic cleanup is an operator task.
+# file_understanding_enabled: true  # master switch for content normalization
+
+# How images are handled for text-only models: 'describe' (caption via a vision
+# model, falling back to a logged drop), 'ocr' (extract text only), or 'off'.
+# vision_strategy: "describe"
+# vision_describe_model: "ollama:qwen2-vl"   # may be local (free) or frontier
+# vision_describe_max_tokens: 1024           # cap per-image caption output (billed to the user)
+
+# Per-model capability overrides. any-llm's provider-level flags over-report for
+# text-only models served behind OpenAI-compatible servers (vLLM, llama.cpp,
+# Ollama), so declare the truth here to enable native passthrough where it works.
+# Keys accept either separator: "provider:model" (matching pricing) or
+# "provider/model"; a bare "model" key also matches.
+# model_capabilities:
+#   "ollama:qwen2-vl":
+#     supports_image: true
+#     supports_pdf: false
+
+# Pre-configured provider credentials
+providers:
+  vertexai:
+    # Vertex AI is a unique case in that it requires a service account JSON file, project ID, and location. See auth/vertex_auth.py for more details.
+    credentials: "/app/service_account.json" # Internal docker path as mapped in docker-compose.yml,
+    project: YOUR_GCP_PROJECT_ID_HERE
+    location: "us-central1"
+
+  openai:
+    api_key: YOUR_OPENAI_API_KEY_HERE
+    api_base: "https://api.openai.com/v1"  # optional
+    # client_args are passed to the provider's client initialization (e.g. custom headers, timeouts)
+    # client_args:
+    #   custom_headers:
+    #     X-Custom-Header: "custom-value"
+    #   timeout: 60
+
+  anthropic:
+    api_key: YOUR_ANTHROPIC_API_KEY_HERE
+
+  mistral:
+    api_key: YOUR_MISTRAL_API_KEY_HERE
+
+  # Named instances: run multiple backends that share an implementation by
+  # giving each a custom key and a `provider_type`. Route with
+  # `home_lab:<model>`. `provider_type: openai-compatible` and
+  # `provider_type: openai_compatible` both alias `openai`.
+  # An optional `models:` list backs /v1/models for backends without /v1/models.
+  # home_lab:
+  #   provider_type: openai
+  #   api_base: "https://my-box.example.ts.net/v1"
+  #   api_key: ${HOME_LAB_TOKEN}
+  #   models:
+  #     - deepseek-v4-flash
+
+  # Add more providers as needed...
+
+# Model pricing configuration (optional but necessary for price tracking)
+# Format: "provider:model" -> input/output price per million tokens
+# Database pricing takes precedence - config only sets initial values
+# Prices are in USD per million tokens
+pricing:
+  # See https://cloud.google.com/vertex-ai/generative-ai/pricing
+  # vertexai:Qwen3-235B-A22B-Instruct-2507:
+  #   input_price_per_million: 0.25
+  #   output_price_per_million: 1.00
+  # openai:gpt-5:
+    # input_price_per_million: 0.25
+    # output_price_per_million: 1.00

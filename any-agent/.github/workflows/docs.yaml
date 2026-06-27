@@ -1,0 +1,71 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'scripts/generate_api_docs.py'
+      - 'scripts/convert_to_gitbook.py'
+      - '.github/workflows/docs.yaml'
+      - 'pyproject.toml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'scripts/generate_api_docs.py'
+      - 'scripts/convert_to_gitbook.py'
+      - '.github/workflows/docs.yaml'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+jobs:
+  docs:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install the latest version of uv and set the python version to 3.13
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: 3.13
+          activate-environment: true
+
+      - name: Install Python dependencies
+        run: uv sync --group docs --extra all
+
+      - name: Build GitBook site
+        run: uv run python scripts/convert_to_gitbook.py
+
+      - name: Deploy to gitbook-docs branch
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          cp .gitbook-branch-readme.md site/README-BRANCH.md
+
+          # Stage the built site outside the working tree. Otherwise `rsync
+          # --delete` below sees `./site/` as extraneous in the destination
+          # and races to delete it while still reading from it.
+          mv site "${RUNNER_TEMP}/gitbook-site"
+
+          git fetch origin gitbook-docs || true
+          if git rev-parse --verify origin/gitbook-docs >/dev/null 2>&1; then
+            git checkout gitbook-docs
+          else
+            git checkout --orphan gitbook-docs
+            git rm -rf .
+          fi
+
+          rsync -a --delete "${RUNNER_TEMP}/gitbook-site/" .
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update GitBook documentation from ${{ github.sha }}"
+            git push origin gitbook-docs
+          fi

@@ -1,0 +1,22 @@
+# Ignore Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore large binary files and model weights
+*.llamafile
+*.llamafile.exe
+*.bin
+*.onnx
+
+# Ignore local database and configurations with keys
+*.db
+config.yml
+.env
+mcpd.log
+otari.db
+
+# Ignore sub-repositories if we are managing them under a monorepo
+# (or we can keep them depending on if we want to commit the cloned repos)
+# If we want to commit the cloned code of Otari/any-agent/mcpd/encoderfile,
+# we need to remove their internal .git folders so they don't become git submodules.

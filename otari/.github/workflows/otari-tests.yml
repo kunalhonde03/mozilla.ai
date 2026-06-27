@@ -1,0 +1,81 @@
+name: Otari Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/gateway/**'
+      - 'alembic/**'
+      - 'tests/integration/**'
+      - 'tests/unit/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/otari-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/gateway/**'
+      - 'alembic/**'
+      - 'tests/integration/**'
+      - 'tests/unit/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/otari-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    environment: integration-tests
+
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      with:
+        python-version: 3.14
+        activate-environment: true
+
+    - name: Install dependencies
+      run: |
+         uv sync --dev --frozen
+
+    - name: Run Otari unit tests
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        uv run pytest tests/unit -v --cov --cov-report=xml -n auto
+
+    - name: Run Otari integration tests
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        uv run pytest tests/integration -v --cov --cov-report=xml --cov-append -n auto
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  openapi-spec:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      with:
+        python-version: 3.14
+        activate-environment: true
+
+    - name: Install dependencies
+      run: uv sync --frozen
+
+    - name: Verify OpenAPI spec is up to date
+      run: make openapi-check
+
+    - name: Verify Postman collection is up to date
+      run: make postman-check

@@ -1,0 +1,53 @@
+name: benchmark
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - .github/**
+      - docs/**
+      - CONTRIBUTING.md
+      - CODE_OF_CONDUCT.md
+      - README.md
+      - mkdocs.yml
+      - examples/**
+      - .vscode/**
+      - scripts/**
+  pull_request:
+    types: [opened, reopened, labeled, unlabeled]
+  workflow_dispatch:
+
+jobs:
+  run_benchmarks:
+    runs-on: ubuntu-latest
+    if: >
+        contains(github.event.pull_request.labels.*.name, 'benchmark') ||
+        github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+
+      - name: Project setup
+        uses: ./.github/actions/project-setup
+
+      - name: Install test dependencies
+        run: just setup
+
+      - name: Install codspeed
+        run: cargo binstall cargo-codspeed --no-confirm --force
+
+      - name: Build the benchmark target(s)
+        run: cargo codspeed build --all-features
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: simulation
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}

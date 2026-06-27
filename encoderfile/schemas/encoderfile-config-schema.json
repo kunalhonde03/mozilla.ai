@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BuildConfig",
+  "type": "object",
+  "properties": {
+    "encoderfile": {
+      "$ref": "#/$defs/EncoderfileConfig"
+    }
+  },
+  "required": [
+    "encoderfile"
+  ],
+  "$defs": {
+    "EncoderfileConfig": {
+      "type": "object",
+      "properties": {
+        "base_binary_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache_dir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_type": {
+          "$ref": "#/$defs/ModelType"
+        },
+        "name": {
+          "type": "string"
+        },
+        "output_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/ModelPath"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokenizer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenizerBuildConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validate_transform": {
+          "type": "boolean",
+          "default": true
+        },
+        "version": {
+          "type": "string",
+          "default": "0.1.0"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "model_type"
+      ]
+    },
+    "ModelPath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "model_config_path": {
+              "type": "string"
+            },
+            "model_weights_path": {
+              "type": "string"
+            },
+            "tokenizer_config_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tokenizer_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "model_config_path",
+            "model_weights_path",
+            "tokenizer_path"
+          ]
+        }
+      ]
+    },
+    "ModelType": {
+      "type": "string",
+      "enum": [
+        "embedding",
+        "sequence_classification",
+        "token_classification",
+        "sentence_embedding"
+      ]
+    },
+    "TokenizerBuildConfig": {
+      "type": "object",
+      "properties": {
+        "pad_strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TokenizerPadStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TokenizerPadStrategy": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fixed": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fixed"
+          ]
+        }
+      ]
+    },
+    "Transform": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  }
+}
