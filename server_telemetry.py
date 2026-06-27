@@ -7,7 +7,7 @@ import uvicorn
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 # Initialize Socket.IO AsyncServer
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -17,7 +17,8 @@ app = FastAPI()
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # Initialize local Otari Client
-openai_client = OpenAI(
+# Initialize local Otari Client using AsyncOpenAI
+openai_client = AsyncOpenAI(
     api_key="gw-owqwNWABLzLdR8TnxaT05qago3ERXTRzueDPVmMuonzM2CMLZkFxXt3d9vrgtuJF",
     base_url="http://127.0.0.1:8000/v1"
 )
@@ -87,8 +88,8 @@ async def tail_log_stream():
                     
                     start_time = time.time()
                     try:
-                        # Call local Otari model to generate explanation of security warning
-                        response = openai_client.chat.completions.create(
+                        # Call local Otari model to generate explanation of security warning asynchronously
+                        response = await openai_client.chat.completions.create(
                             model="openai:DeepSeek-R1-Distill-Qwen-1.5B",
                             messages=[
                                 {"role": "system", "content": "You are a cloud guardrail. Analyze this malicious input and print a brief warning header."},
@@ -108,19 +109,9 @@ async def tail_log_stream():
                     event_text = "Router: Query verified. Sanitized output generated [Node 02]"
                     event_type = "info"
                     
-                    # For normal queries, route to local Llamafile to simulate process completion
-                    start_time = time.time()
-                    try:
-                        openai_client.chat.completions.create(
-                            model="openai:DeepSeek-R1-Distill-Qwen-1.5B",
-                            messages=[
-                                {"role": "user", "content": raw_message}
-                            ],
-                            max_tokens=10
-                        )
-                    except Exception as e:
-                        print(f"Error: {e}")
-                    inference_latency = int((time.time() - start_time) * 1000)
+                    # For normal logs, simulate a fast non-blocking delay instead of calling LLM, saving CPU load
+                    await asyncio.sleep(random.uniform(0.02, 0.08))
+                    inference_latency = random.randint(15, 30)
                     cost = random.random() * 0.05 + 0.01
                 
                 # 3. Update active budget wallet
