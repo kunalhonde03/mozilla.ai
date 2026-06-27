@@ -7,6 +7,7 @@ import TopologyVisualizer from './components/TopologyVisualizer';
 import EventsLog from './components/EventsLog';
 import LogAuditor from './components/LogAuditor';
 import ThreatPulse from './components/ThreatPulse';
+import ForensicBlackbox from './components/ForensicBlackbox';
 
 export default function App() {
   const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
@@ -239,6 +240,9 @@ export default function App() {
 
           {/* Log Auditor Portal */}
           <LogAuditor />
+
+          {/* Forensic Blackbox & Egress Switch */}
+          <ForensicBlackbox />
 
           {/* Quick Specs / Transparency details */}
           <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
