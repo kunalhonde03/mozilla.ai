@@ -6,6 +6,7 @@ import SecurityFeed from './components/SecurityFeed';
 import TopologyVisualizer from './components/TopologyVisualizer';
 import EventsLog from './components/EventsLog';
 import LogAuditor from './components/LogAuditor';
+import ThreatPulse from './components/ThreatPulse';
 
 export default function App() {
   const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
@@ -211,6 +212,11 @@ export default function App() {
           </form>
         </div>
       )}
+
+      {/* Threat Pulse ECG wave visualizer */}
+      <div style={{ padding: '16px 24px 0 24px' }}>
+        <ThreatPulse />
+      </div>
 
       {/* DASHBOARD MODULES */}
       <main className="dashboard-grid">
