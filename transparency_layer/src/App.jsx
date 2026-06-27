@@ -8,6 +8,7 @@ import EventsLog from './components/EventsLog';
 import LogAuditor from './components/LogAuditor';
 import ThreatPulse from './components/ThreatPulse';
 import ForensicBlackbox from './components/ForensicBlackbox';
+import InteractiveConsole from './components/InteractiveConsole';
 
 export default function App() {
   const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
@@ -228,6 +229,9 @@ export default function App() {
 
           {/* Actionable System Journal Event Log */}
           <EventsLog />
+
+          {/* Interactive Gateway Sandbox Console */}
+          <InteractiveConsole />
 
           {/* Security Log Feed */}
           <SecurityFeed />
