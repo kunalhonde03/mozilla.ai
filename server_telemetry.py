@@ -156,7 +156,8 @@ async def tail_log_stream():
                     "ram": round(5.2 + random.random() * 0.5, 1),
                     "disk": round(0.5 + random.random() * 3.0, 1),
                     "gateLatency": gate_latency,
-                    "inferenceLatency": inference_latency if inference_latency > 0 else random.randint(20, 45)
+                    "inferenceLatency": inference_latency if inference_latency > 0 else random.randint(20, 45),
+                    "activeModel": "Llama-3-8B (Escalated)" if is_injection else "DeepSeek-1.5B (Local)"
                 }
                 await sio.emit("hardware_stats", stats_payload)
                 

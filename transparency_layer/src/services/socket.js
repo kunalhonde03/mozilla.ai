@@ -185,7 +185,8 @@ class TelemetrySocketService {
         ram,
         disk,
         gateLatency,
-        inferenceLatency
+        inferenceLatency,
+        activeModel: currentMock.isInjection ? "Llama-3-8B (Escalated)" : "DeepSeek-1.5B (Local)"
       });
 
       // 3. Emit log event
