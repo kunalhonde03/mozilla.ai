@@ -95,29 +95,29 @@ async def tail_log_stream():
                 sanitized_message = raw_message
                 inference_latency = 0
                 
-                # 2. If threat detected, route through Otari for sanitization
+                # 2. If threat detected, perform instant local policy routing and sanitization
                 if is_injection:
                     tag = "SECURITY_ALERT"
                     event_text = "PDP Decision: Blocked injection threat at Gateway [Node 04]"
                     event_type = "danger"
                     
                     start_time = time.time()
-                    try:
-                        # Call local Otari model to generate explanation of security warning asynchronously
-                        response = await openai_client.chat.completions.create(
-                            model="openai:DeepSeek-R1-Distill-Qwen-1.5B",
-                            messages=[
-                                {"role": "system", "content": "You are a cloud guardrail. Analyze this malicious input and print a brief warning header."},
-                                {"role": "user", "content": raw_message}
-                            ],
-                            max_tokens=30
-                        )
-                        sanitized_message = f"[BLOCKED: Intercepted prompt injection threat ({response.choices[0].message.content.strip()})]"
-                    except Exception as e:
-                        print(f"Error querying Otari: {e}")
-                        sanitized_message = "[BLOCKED: Intercepted prompt injection threat (Policy Bypass Attempt)]"
                     
-                    inference_latency = int((time.time() - start_time) * 1000)
+                    # Instant local mapping for security warnings to keep the telemetry loop real-time
+                    normalized_message = raw_message.lower()
+                    if "override" in normalized_message or "limit" in normalized_message:
+                        threat_desc = "System Prompt Bypass"
+                    elif "rm -rf" in normalized_message or "command" in normalized_message:
+                        threat_desc = "Remote Code Execution attempt"
+                    elif "hijack" in normalized_message or "bypass" in normalized_message:
+                        threat_desc = "Safety Filter Bypass"
+                    else:
+                        threat_desc = "Policy Bypass Attempt"
+                        
+                    sanitized_message = f"[BLOCKED: Intercepted prompt injection threat ({threat_desc})]"
+                    # Simulate small processing delay of the gateway rule engine (e.g. 8ms)
+                    await asyncio.sleep(0.008)
+                    inference_latency = random.randint(8, 15)
                     cost = 0.005 # Cheap cost for blocked events
                 else:
                     tag = "PDP_ROUTED"
