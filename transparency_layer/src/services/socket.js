@@ -13,7 +13,7 @@ class TelemetrySocketService {
     this.useSimulation = true;
     this.simInterval = null;
     this.currentBudget = 0.42;
-    this.backendUrl = 'http://localhost:5000';
+    this.backendUrl = 'http://127.0.0.1:5000';
   }
 
   connect(url = this.backendUrl) {

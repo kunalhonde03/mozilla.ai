@@ -9,7 +9,7 @@ import EventsLog from './components/EventsLog';
 export default function App() {
   const [activeModel, setActiveModel] = useState('DeepSeek-1.5B (Local)');
   const [isSimulating, setIsSimulating] = useState(true);
-  const [socketUrl, setSocketUrl] = useState('http://localhost:5000');
+  const [socketUrl, setSocketUrl] = useState('http://127.0.0.1:5000');
   const [showConfig, setShowConfig] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [hwStats, setHwStats] = useState({
