@@ -1,0 +1,7 @@
+[[servers]]
+  name = "log-reader"
+  package = "python::mcp_log_reader"
+  tools = ["read_new_logs"]
+
+[servers.log-reader]
+  args = ["-m", "mcp_log_reader"]
