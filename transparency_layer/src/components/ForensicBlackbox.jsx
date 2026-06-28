@@ -9,11 +9,11 @@ export default function ForensicBlackbox() {
   const [downloadReady, setDownloadReady] = useState(false);
 
   useEffect(() => {
-    // Egress leak detection monitor simulation or live events
+    // Egress leak detection monitor live events
     const unsub = socketService.subscribe('logs', (log) => {
-      // If the simulator outputs a prompt containing specific passwords or keys
       const rawText = (log.raw || '').toLowerCase();
-      if (rawText.includes('password') || rawText.includes('secrets') || rawText.includes('admin keys')) {
+      // Trigger leak switch if log is blocked AND contains egress leak indicators (keys, secrets, password)
+      if (log.blocked && (rawText.includes('password') || rawText.includes('secrets') || rawText.includes('keys'))) {
         triggerKillSwitch(log.raw);
       }
     });

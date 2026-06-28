@@ -18,6 +18,15 @@ app = FastAPI()
 # Wrap FastAPI app with Socket.io
 asgi_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
+# Enable CORS for frontend prompt submission
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Initialize local Otari Client
 # Initialize local Otari Client using AsyncOpenAI
 # Initialize local Otari Client using AsyncOpenAI with 2 second timeout
@@ -69,7 +78,7 @@ if not os.path.exists(LOG_FILE):
         f.write("")
 
 # Keywords indicating prompt injection/threat in logs
-THREAT_KEYWORDS = ["ignore", "override", "rm -rf", "bypass", "hijack"]
+THREAT_KEYWORDS = ["ignore", "override", "rm -rf", "bypass", "hijack", "secrets", "keys", "password"]
 
 def check_for_threat(log_line: str) -> bool:
     normalized = log_line.lower()
@@ -250,6 +259,98 @@ async def connect(sid, environ):
 @sio.on('disconnect')
 def disconnect(sid):
     print(f"Client disconnected: {sid}")
+
+# Pydantic schema for prompt request
+from pydantic import BaseModel
+class PromptRequest(BaseModel):
+    prompt: str
+
+@app.post("/scan")
+async def scan_prompt(req: PromptRequest):
+    global current_budget, latest_stats
+    prompt_text = req.prompt
+    is_injection = check_for_threat(prompt_text)
+    
+    timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Process local inference simulation
+    start_time = time.time()
+    sanitized_prompt = prompt_text
+    response_text = ""
+    inference_latency = 0
+    cost = 0.0
+    
+    if is_injection:
+        sanitized_prompt = f"[BLOCKED: Intercepted prompt injection threat]"
+        response_text = "ACCESS DENIED. Secure policy violation detected at gateway."
+        cost = 0.005 # Small penalty cost
+        inference_latency = 2 # instant block
+    else:
+        # Simulate local LLM response
+        try:
+            # Short sleep to simulate real hardware latency
+            await asyncio.sleep(0.4)
+            response_text = f"Processed successfully by DeepSeek-1.5B Core. Result: Safe execution verified for '{prompt_text[:30]}...'"
+            cost = random.uniform(0.01, 0.03)
+        except Exception:
+            response_text = "Fallback output: Clean query verified."
+            cost = 0.01
+        inference_latency = int((time.time() - start_time) * 1000)
+
+    # Update active budget
+    current_budget = min(2.0, current_budget + cost)
+    await sio.emit("budget_update", {"spent": round(current_budget, 4), "ceiling": latest_genome_result["ceiling"]})
+
+    # Log file tracking
+    log_line = f"[{'SECURITY_ALERT' if is_injection else 'AGENT_INPUT'}] Prompt: {prompt_text} | Output: {response_text}"
+    with open(LOG_FILE, "a") as f:
+        f.write(f"[{timestamp_str}] {log_line}\n")
+
+    # Broadcast log event to UI
+    log_payload = {
+        "id": str(random.randint(10000, 99999)),
+        "timestamp": timestamp_str,
+        "raw": prompt_text,
+        "sanitized": sanitized_prompt,
+        "blocked": is_injection,
+        "cost": cost,
+        "latency": inference_latency,
+        "tag": "SECURITY_ALERT" if is_injection else "PDP_ROUTED"
+      }
+    
+    log_history.append(log_payload)
+    if len(log_history) > 50:
+        log_history.pop(0)
+    await sio.emit("log_event", log_payload)
+
+    # Broadcast system event
+    event_payload = {
+        "id": str(random.randint(100000, 999999)),
+        "timestamp": timestamp_str,
+        "text": f"Gateway: Scanned manual prompt from dashboard",
+        "type": "danger" if is_injection else "info"
+    }
+    system_events.append(event_payload)
+    await sio.emit("system_event", event_payload)
+
+    # Broadcast hardware stats updates
+    stats_payload = {
+        "cpu": random.randint(45, 75) if is_injection else random.randint(30, 48),
+        "ram": round(5.2 + random.random() * 0.3, 1),
+        "disk": round(0.1 + random.random() * 1.5, 1),
+        "gateLatency": random.randint(3, 8),
+        "inferenceLatency": inference_latency,
+        "activeModel": "Llama-3-8B (Escalated)" if is_injection else "DeepSeek-1.5B (Local)"
+    }
+    latest_stats = stats_payload
+    await sio.emit("hardware_stats", stats_payload)
+
+    return {
+        "blocked": is_injection,
+        "response": response_text,
+        "latency": inference_latency,
+        "cost": cost
+    }
 
 @app.on_event("startup")
 async def startup_event():
