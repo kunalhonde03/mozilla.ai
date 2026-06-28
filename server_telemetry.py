@@ -27,14 +27,55 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize local Otari Client
-# Initialize local Otari Client using AsyncOpenAI
-# Initialize local Otari Client using AsyncOpenAI with 2 second timeout
-openai_client = AsyncOpenAI(
+# Initialize local Primary Otari Client (DeepSeek Core Node 1)
+openai_client_primary = AsyncOpenAI(
     api_key="gw-owqwNWABLzLdR8TnxaT05qago3ERXTRzueDPVmMuonzM2CMLZkFxXt3d9vrgtuJF",
-    base_url="http://127.0.0.1:8000/v1",
-    timeout=2.0
+    base_url="http://127.0.0.1:8080/v1",
+    timeout=1.5
 )
+
+# Initialize local Backup Otari Client (DeepSeek Core Node 2)
+openai_client_backup = AsyncOpenAI(
+    api_key="gw-owqwNWABLzLdR8TnxaT05qago3ERXTRzueDPVmMuonzM2CMLZkFxXt3d9vrgtuJF",
+    base_url="http://127.0.0.1:8081/v1",
+    timeout=1.5
+)
+
+# Active node state tracking variable
+active_node_id = "Node_1_Primary"
+active_node_url = "http://127.0.0.1:8080/v1"
+
+async def execute_llm_query(prompt: str):
+    global active_node_id, active_node_url
+    
+    # Attempt primary server (Node 1)
+    try:
+        response = await openai_client_primary.chat.completions.create(
+            model="local-model",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=60
+        )
+        active_node_id = "Node_1_Primary"
+        active_node_url = "http://127.0.0.1:8080/v1"
+        return response.choices[0].message.content, active_node_id, active_node_url
+    except Exception as primary_err:
+        print(f"Primary Server Node 1 (8080) failed/crashed: {primary_err}. Initiating automatic failover...")
+        
+        # Fallback to secondary backup server (Node 2)
+        try:
+            response = await openai_client_backup.chat.completions.create(
+                model="local-model",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=60
+            )
+            active_node_id = "Node_2_Backup (FAILOVER)"
+            active_node_url = "http://127.0.0.1:8081/v1"
+            return response.choices[0].message.content, active_node_id, active_node_url
+        except Exception as backup_err:
+            print(f"Backup Server Node 2 (8081) also failed: {backup_err}. Using local rule-engine backup.")
+            active_node_id = "Internal_Gateway_Shield (FALLBACK)"
+            active_node_url = "Local System Loop"
+            return "Internal Gateway Fallback: Safe offline verification output.", active_node_id, active_node_url
 
 LOG_FILE = "logs_stream.log"
 current_budget = 0.42
@@ -286,14 +327,13 @@ async def scan_prompt(req: PromptRequest):
         cost = 0.005 # Small penalty cost
         inference_latency = 2 # instant block
     else:
-        # Simulate local LLM response
+        # Evaluate local LLM response using failover router
         try:
-            # Short sleep to simulate real hardware latency
-            await asyncio.sleep(0.4)
-            response_text = f"Processed successfully by DeepSeek-1.5B Core. Result: Safe execution verified for '{prompt_text[:30]}...'"
+            llm_response, node_id, node_url = await execute_llm_query(prompt_text)
+            response_text = f"[{node_id}] {llm_response}"
             cost = random.uniform(0.01, 0.03)
         except Exception:
-            response_text = "Fallback output: Clean query verified."
+            response_text = "[FAILOVER_GATEWAY] Fallback output: Clean query verified."
             cost = 0.01
         inference_latency = int((time.time() - start_time) * 1000)
 
