@@ -105,9 +105,15 @@ class TelemetrySocketService {
   }
 
   emitLog(logData) {
-    this.listeners.logs.forEach(cb => cb(logData));
+    // Normalize properties for both local simulations and live HTTP scans
+    const normalizedLog = {
+      ...logData,
+      blocked: logData.blocked !== undefined ? logData.blocked : logData.isInjection,
+      isInjection: logData.isInjection !== undefined ? logData.isInjection : logData.blocked
+    };
+    this.listeners.logs.forEach(cb => cb(normalizedLog));
     this.listeners.particles.forEach(cb => cb({
-      blocked: logData.isInjection,
+      blocked: normalizedLog.blocked,
       timestamp: Date.now()
     }));
   }
