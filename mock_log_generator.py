@@ -314,7 +314,7 @@ def main():
                     if elapsed < phase['duration']:
                         time.sleep(phase['interval'])
 
-            print(f"\n  ♻️  Cycle {cycle} complete — restarting scenario loop...\n")
+            print(f"\n  [RESET] Cycle {cycle} complete -- restarting scenario loop...\n")
 
 
 if __name__ == "__main__":

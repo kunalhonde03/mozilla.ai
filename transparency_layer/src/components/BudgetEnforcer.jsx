@@ -163,7 +163,7 @@ export default function BudgetEnforcer() {
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
-        marginBottom: '16px'
+        marginBottom: '12px'
       }}>
         {isLimitExceeded ? (
           <>
@@ -181,6 +181,44 @@ export default function BudgetEnforcer() {
             <span><strong>Active:</strong> Policy filters passing. Access tokens cleared.</span>
           </>
         )}
+      </div>
+
+      {/* Manual Limit Modifier Controls */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '8px', 
+        marginBottom: '16px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px'
+      }}>
+        <button 
+          onClick={() => setBudgetLimit(prev => Math.min(10.0, prev + 1.0))}
+          className="btn"
+          style={{ 
+            flexGrow: 1, 
+            padding: '6px 8px', 
+            fontSize: '10px',
+            borderColor: 'var(--neon-cyan)',
+            color: 'var(--neon-cyan)',
+            background: 'rgba(0, 242, 254, 0.05)'
+          }}
+        >
+          ➕ INCREASE LIMIT (+$1.00)
+        </button>
+        <button 
+          onClick={() => {
+            setBudgetLimit(DEFAULT_LIMIT);
+            setSpent(0.42); // reset spent as well for demo refresh
+          }}
+          className="btn btn-secondary"
+          style={{ 
+            flexGrow: 1, 
+            padding: '6px 8px', 
+            fontSize: '10px'
+          }}
+        >
+          🔄 RESET TO DEFAULT ($2.00)
+        </button>
       </div>
 
       {/* HIGH-DENSITY CLOUD TELEMETRY TABLE */}
