@@ -10,7 +10,7 @@ class TelemetrySocketService {
       stats: [],
       events: []
     };
-    this.useSimulation = true;
+    this.useSimulation = false;
     this.simInterval = null;
     this.currentBudget = 0.42;
     this.backendUrl = 'http://127.0.0.1:5000';

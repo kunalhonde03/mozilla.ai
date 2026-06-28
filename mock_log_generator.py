@@ -206,35 +206,35 @@ PHASES = [
         "duration": 45,        # seconds
         "interval": 2.5,       # seconds between logs
         "burst": False,
-        "label": "🟢 Phase 1: Normal Operations"
+        "label": "[OK] Phase 1: Normal Operations"
     },
     {
         "name": "THREAT_BUILDUP",
         "duration": 30,
         "interval": 2.0,
         "burst": False,
-        "label": "🟡 Phase 2: Threat Buildup (attacks starting...)"
+        "label": "[WARN] Phase 2: Threat Buildup (attacks starting...)"
     },
     {
         "name": "DDOS_BURST",
         "duration": 20,
         "interval": 0.4,       # Very fast — DDoS floods
         "burst": True,
-        "label": "🔴 Phase 3: DDoS BURST! (GA → AI_STARVATION)"
+        "label": "[ALERT] Phase 3: DDoS BURST! (GA -> AI_STARVATION)"
     },
     {
         "name": "RECOVERY",
         "duration": 25,
         "interval": 2.0,
         "burst": False,
-        "label": "🟡 Phase 4: Recovery (GA rebuilding ceiling)"
+        "label": "[INFO] Phase 4: Recovery (GA rebuilding ceiling)"
     },
     {
         "name": "CRITICAL_LOAD",
         "duration": 20,
         "interval": 1.5,
         "burst": False,
-        "label": "🔵 Phase 5: Critical Load (GA → SURVIVAL_EXPANSION)"
+        "label": "[BUSY] Phase 5: Critical Load (GA -> SURVIVAL_EXPANSION)"
     },
 ]
 
@@ -290,7 +290,7 @@ def main():
     with open(log_file_path, "a") as f:
         while True:
             cycle += 1
-            print(f"\n━━━━ CYCLE {cycle} START ━━━━")
+            print(f"\n---- CYCLE {cycle} START ----")
 
             for phase in PHASES:
                 print(f"\n  {phase['label']}")
